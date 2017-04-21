@@ -31,6 +31,10 @@ Table of Content
 
 ## 1. Overview
 
+# 1.1. Introduction
+
+This tool is build to monitor a CDH based Hadoop cluster. It is a completely Bash based tool with no additional tool requirements. There is considerable challange in monitoring a Secured (Kerberised) Hadoop Cluster and thus there are limitation to what the tools can monitor.
+
 ## 2. Tool technical overview
 
 ## 3. Property file overview and details of property monitored
