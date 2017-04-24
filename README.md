@@ -1,4 +1,4 @@
-### HadoopMonitor
+# HadoopMonitor
 
 Table of Content
 
@@ -10,17 +10,19 @@ Table of Content
         
         1.3. Scope of monitoring
         
+        1.4. Quick Installation
+        
 2. Tool technical overview
 
-        2.1. Directory layout
+        2.1. Tool Directory layout
         
-        2.2. Executable functionality
+        2.2. Execution Process
         
         2.3. Configuration and History Management overview
         
         2.4. Toubleshooting steps
         
-        2.5. Incident Management Tool Process
+        2.5. Incident Management Tool Integration Process
         
         2.6. HA Setup overview
         
@@ -31,11 +33,73 @@ Table of Content
 
 ## 1. Overview
 
-# 1.1. Introduction
+### 1.1. Introduction
 
-This tool is build to monitor a CDH based Hadoop cluster. It is a completely Bash based tool with no additional tool requirements. There is considerable challange in monitoring a Secured (Kerberised) Hadoop Cluster and thus there are limitation to what the tools can monitor.
+This tool is build to monitor a CDH based Hadoop cluster. It is a completely Bash based tool with no additional tool requirements. There is considerable challange in monitoring a Secured (Kerberised) Hadoop Cluster and thus there are limitation to what the tools can monitor. This simple Bash base tool can resolve monitoring challenge and its inbuild support to integrate with your Incident Management framework can help you achive a Enterprise Grade monitoring setup with no and minimum cost.
+
+Note the tool has all available feature of fail tolerance and uses minimum resource and ideal to be placed on your clusters edge node.
+
+### 1.2. Advantage
+
+Below are the feature of the tool
+        a. Monitor Secured/Non Secure CDH Cluster.
+        b. Monitor CDH Services and Sanity Check separately. Thus both can be separatly schedules as per requirement.
+        c. Bare minimum setup required other than already basic configuration available in any CDH Cluster environment.
+        d. Does Synthetic monitoring for Hive and simulates User experience of this major CDH Service.
+        e. Generate Alert Mail and also has the ability to integrate with your exeisting Incident Management Setup.
+
+### 1.3. Scope of monitoring
+
+At this point of time the tool can be used to monitor any CDH Cluster (Secure and Non Secure Cluster). The tool relies heavily on Cloudera Manager API to monitor the Cluster thus dependency on CDH Clsuter. The tool can monitor a CDH Environment with SSL Secured CM API which is protected with User Authntication.
+
+Since tool is Unix Bash based it is only limited to Unix environment and it has been tested on Linux cluster. Note the tool require CDH Client configuration to be available on the host as few of the parameter needs client utility to be executed locally, it is ideal to be placed on any/many of the edge node of your cluster.
+
+### 1.4. Quick Installation
+
+This probably is the best part of the tool. The installation require minimum effort, but before you install please make sure the below is available in your environment.
+
+        a. Create a SSH keys to identify trusted computers, without involving passwords. The user with which the tool execute should be able to able to login to any Cluster Host without password prompt.
+        b. Utility that should be present are quite basic core Linux utility mostly comes with Default Linux build. Eg: curl, netstat.
+        
+The installation require the tools directory to be placed on any location on the host where the tool need to be executed. This is all it takes to install the tool. But please do go though the Tool technical overview section to understand how the tool should be setup for monitoring and finally initiate the actual monitiong.    
 
 ## 2. Tool technical overview
+
+
+### 2.1. Tool Directory layout
+
+Once you have installed the tool the tool home will have the following content 
+
+        [DIRECTORY] **tmp** - Temporary work area. Files inside it can be deleted after execution but not during execution.
+        [DIRECTORY] **log** - Log directory. 
+        [DIRECTORY] **datastore** - Keytab file location. In case your cluster is secure and you will have to place the tool users Keytab file here, name should be [User Name].keytab
+        [DIRECTORY] **history** - Contains report file for Incident Management integration. 
+
+        [FILE] **check_hadoop.prop** - Main property file. This need to be filled for the tool to be operational.
+        [FILE] **scheduler** - Main executor script. This is to be executed from the primary monitor node.
+        [FILE] **scheduler_failover** - Backup executor script. This is to be executed from the failover monitor node. This monitor will be kicked of if the primary node is non responsive.            
+        [FILE] **passwd_util** - Password encryption utility. Tool to encrypt the password for the monitor user to be placed in property file.
+        [FILE] **check_sanity** - Sanity check script. 
+        [FILE] **check_service** - Service check script.     
+        [FILE] **sanity.mail.body** - Email Templete for Sanity Monitoring.
+        [FILE] **service.mail.body** - Email Templete for Service Monitoring.
+
+
+### 2.2. Execution Process
+        
+        
+### 2.3. Configuration and History Management overview
+        
+        
+### 2.4. Toubleshooting steps
+        
+        
+### 2.5. Incident Management Tool Integration Process
+        
+        
+### 2.6. HA Setup overview
+
+
 
 ## 3. Property file overview and details of property monitored
 
