@@ -104,26 +104,26 @@ Once you have installed the tool the tool home will have the following content
 The tool does two basic operation. 
 
 
-**Sanity Check**
+***Sanity Check***
 
 This is basic sanity check which does a basic sanity check of the Cluster. Below are the checks performed. 
-***a. HDFS Sanity Check***
+*a. HDFS Sanity Check*
 HDFS usage percentage. HDFS Corrup Block. Under Replicated Block.
 
-***b. HDFS Usage Check***
+*b. HDFS Usage Check*
 HDFS Temp Usage. Service Users Home. Normal User Home usage monitoring.
 
-***c. Hive Service Synthetic Monitoring***
+*c. Hive Service Synthetic Monitoring*
 Hive service health status monitoring by response of runnning real query and validating reponse and time for the same.
 Hive Server2 simaltanious connection count.
 
-***d. YARN Service Monitoring***
+*d. YARN Service Monitoring*
 Yarn Cluster load monitoring by amount of Jobs in ACCEPTED state. Suspected Job Hung (Job that does not progress over a period of time is suspected as hung). Long running (Jobs running for more than a period of time).
 
-***e. Hue Process Monitoring***
+*e. Hue Process Monitoring*
 The percentage of Physical Memory used by the Hue process.
 
-***e. Worker Node Monitoring***
+*e. Worker Node Monitoring*
 Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy node.
 
 
