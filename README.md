@@ -60,6 +60,7 @@ This probably is the best part of the tool. The installation require minimum eff
 
         a. Create a SSH keys to identify trusted computers, without involving passwords. The user with which the tool execute should be able to able to login to any Cluster Host without password prompt.
         b. Utility that should be present are quite basic core Linux utility mostly comes with Default Linux build. Eg: curl, netstat.
+        c. SMTP Setup is required for the tool to send Alerts for issue detection.
         
 The installation require the tools directory to be placed on any location on the host where the tool need to be executed. This is all it takes to install the tool. But please do go though the Tool technical overview section to understand how the tool should be setup for monitoring and finally initiate the actual monitiong.    
 
@@ -70,24 +71,44 @@ The installation require the tools directory to be placed on any location on the
 
 Once you have installed the tool the tool home will have the following content 
 
-        [DIRECTORY] **tmp** - Temporary work area. Files inside it can be deleted after execution but not during execution.
-        [DIRECTORY] **log** - Log directory. 
-        [DIRECTORY] **datastore** - Keytab file location. In case your cluster is secure and you will have to place the tool users Keytab file here, name should be [User Name].keytab
-        [DIRECTORY] **history** - Contains report file for Incident Management integration. 
+[DIRECTORY] **tmp** - Temporary work area. Files inside it can be deleted after execution but not during execution.
+[DIRECTORY] **log** - Log directory. 
+[DIRECTORY] **datastore** - Keytab file location. In case your cluster is secure and you will have to place the tool users Keytab file here, name should be [User Name].keytab
+[DIRECTORY] **history** - Contains report file for Incident Management integration. 
 
-        [FILE] **check_hadoop.prop** - Main property file. This need to be filled for the tool to be operational.
-        [FILE] **scheduler** - Main executor script. This is to be executed from the primary monitor node.
-        [FILE] **scheduler_failover** - Backup executor script. This is to be executed from the failover monitor node. This monitor will be kicked of if the primary node is non responsive.            
-        [FILE] **passwd_util** - Password encryption utility. Tool to encrypt the password for the monitor user to be placed in property file.
-        [FILE] **check_sanity** - Sanity check script. 
-        [FILE] **check_service** - Service check script.     
-        [FILE] **sanity.mail.body** - Email Templete for Sanity Monitoring.
-        [FILE] **service.mail.body** - Email Templete for Service Monitoring.
+[FILE] **check_hadoop.prop** - Main property file. This need to be filled for the tool to be operational.
+[FILE] **scheduler** - Main executor script. This is to be executed from the primary monitor node.
+[FILE] **scheduler_failover** - Backup executor script. This is to be executed from the failover monitor node. This monitor will be kicked of if the primary node is non responsive.            
+[FILE] **passwd_util** - Password encryption utility. Tool to encrypt the password for the monitor user to be placed in property file.
+[FILE] **check_sanity** - Sanity check script. 
+[FILE] **check_service** - Service check script.     
+[FILE] **sanity.mail.body** - Email Templete for Sanity Monitoring.
+[FILE] **service.mail.body** - Email Templete for Service Monitoring.
 
 
 ### 2.2. Execution Process
-        
-        
+
+The tool does two basic operation. 
+
+**Sanity Check**
+
+This is basic sanity check which does a basic sanity check of the Cluster. Below are the checks performed. 
+***a. HDFS Sanity Check***
+HDFS usage percentage. HDFS Corrup Block. Under Replicated Block.
+***b. HDFS Usage Check***
+HDFS Temp Usage. Service Users Home. Normal User Home usage monitoring.
+***c. Hive Service Synthetic Monitoring***
+Hive service health status monitoring by response of runnning real query and validating reponse and time for the same.
+Hive Server2 simaltanious connection count.
+***d. YARN Service Monitoring***
+Yarn Cluster load monitoring by amount of Jobs in ACCEPTED state. Suspected Job Hung (Job that does not progress over a period of time is suspected as hung). Long running (Jobs running for more than a period of time).
+***e. Hue Process Monitoring***
+The percentage of Physical Memory used by the Hue process.
+***e. Worker Node Monitoring***
+Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy node.
+
+
+
 ### 2.3. Configuration and History Management overview
         
         
