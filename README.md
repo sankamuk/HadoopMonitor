@@ -64,6 +64,8 @@ This probably is the best part of the tool. The installation require minimum eff
         
 The installation require the tools directory to be placed on any location on the host where the tool need to be executed. This is all it takes to install the tool. But please do go though the Tool technical overview section to understand how the tool should be setup for monitoring and finally initiate the actual monitiong.    
 
+
+
 ## 2. Tool technical overview
 
 
@@ -96,9 +98,11 @@ Once you have installed the tool the tool home will have the following content
 [FILE] **service.mail.body** - Email Templete for Service Monitoring.
 
 
+
 ### 2.2. Execution Process
 
 The tool does two basic operation. 
+
 
 **Sanity Check**
 
@@ -126,18 +130,24 @@ Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy 
 
 ### 2.3. Configuration and History Management overview
         
-        
+
+
 ### 2.4. Toubleshooting steps
-        
+
+
         
 ### 2.5. Incident Management Tool Integration Process
-        
+
+
         
 ### 2.6. HA Setup overview
 
 
 
+
 ## 3. Property file overview and details of property monitored
+
+
 
 ## 4. Support and managebility
 
