@@ -123,7 +123,7 @@ Yarn Cluster load monitoring by amount of Jobs in ACCEPTED state. Suspected Job 
 *e. Hue Process Monitoring:*
 The percentage of Physical Memory used by the Hue process.
 
-*e. Worker Node Monitoring:*
+*f. Worker Node Monitoring:*
 Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy node.
 
 
