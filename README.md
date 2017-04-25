@@ -107,24 +107,44 @@ The tool does two basic operation.
 ***Sanity Check***
 
 This is basic sanity check which does a basic sanity check of the Cluster. Below are the checks performed. 
-*a. HDFS Sanity Check:*
-HDFS usage percentage. HDFS Corrup Block. Under Replicated Block.
+        *a. HDFS Sanity Check:*
+        HDFS usage percentage. HDFS Corrup Block. Under Replicated Block.
 
-*b. HDFS Usage Check:*
-HDFS Temp Usage. Service Users Home. Normal User Home usage monitoring.
+        *b. HDFS Usage Check:*
+        HDFS Temp Usage. Service Users Home. Normal User Home usage monitoring.
 
-*c. Hive Service Synthetic Monitoring:*
-Hive service health status monitoring by response of runnning real query and validating reponse and time for the same.
-Hive Server2 simaltanious connection count.
+        *c. Hive Service Synthetic Monitoring:*
+        Hive service health status monitoring by response of runnning real query and validating reponse and time for the same.
+        Hive Server2 simaltanious connection count.
 
-*d. YARN Service Monitoring:*
-Yarn Cluster load monitoring by amount of Jobs in ACCEPTED state. Suspected Job Hung (Job that does not progress over a period of time is suspected as hung). Long running (Jobs running for more than a period of time).
+        *d. YARN Service Monitoring:*
+        Yarn Cluster load monitoring by amount of Jobs in ACCEPTED state. Suspected Job Hung (Job that does not progress over a period of time is suspected as hung). Long running (Jobs running for more than a period of time).
 
-*e. Hue Process Monitoring:*
-The percentage of Physical Memory used by the Hue process.
+        *e. Hue Process Monitoring:*
+        The percentage of Physical Memory used by the Hue process.
 
-*f. Worker Node Monitoring:*
-Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy node.
+        *f. Worker Node Monitoring:*
+        Cluster worker node health monitoring. Tool relies on CM to detect an unhealthy node.
+
+To setup your environment for Sanity Check you should first setup the configuration file correctly and check your environnment have all the basic requirements meet, once you are done you should just execute the following command to execute the sanity check.
+
+[SCRIPT HOME]/scheduler sanity
+
+***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 3 hours*** using Unix default scheduler Crontab.
+
+* */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log
+
+***Service Check***
+
+This checks the service health for all services choosen to be monitor. Note the services that you want to be monitored need to be explicitly be specified in the property failing to do so you will have no service being monitored.
+
+To setup your environment for Sanity Check you should first setup the configuration file correctly and check your environnment have all the basic requirements meet, once you are done you should just execute the following command to execute the sanity check.
+
+[SCRIPT HOME]/scheduler service
+
+***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 5 minute*** using Unix default scheduler Crontab.
+
+*/5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log
 
 
 
