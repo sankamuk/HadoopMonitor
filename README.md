@@ -89,6 +89,8 @@ Once you have installed the tool the tool home will have the following content
 
 [FILE] **passwd_util** - Password encryption utility. Tool to encrypt the password for the monitor user to be placed in property file.
 
+[FILE] **clr_hsty_util** - Utility to clear history from primary db file and archived under backup.
+
 [FILE] **check_sanity** - Sanity check script. 
 
 [FILE] **check_service** - Service check script.     
@@ -132,7 +134,7 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 3 hours*** using Unix default scheduler Crontab.
 
-* */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log
+- * */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log
 
 ***Service Check***
 
@@ -144,28 +146,59 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 5 minute*** using Unix default scheduler Crontab.
 
-*/5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log
+- */5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log
 
 
 
-### 2.3. Configuration and History Management overview
+### 2.3. History Management overview
         
+The script manage history for both alert confirmation and also for avoiding repeated alert notification. Below are the details understanding of the both.
 
+***Repeated Alert Avoidance***
+
+Since the script is expected to execute in a periodic manner thus it is obvious issues once detected will again be detected in subsequent execution until it has been taken care of. To avoid repeated reporting of issues the script relies on history maintainance. The script will only report a new alert condition if the window of issue (list of issue) has increased. Thus if the window sinks (reduction of issue from previous execution) or the window stays same (no new issue detected) the script will not raise an alert and considers considers already reported and does not issues a fresh alert.
+
+Please note the script uses a file based history management and history files are kept and maintained under **history** directory. Thus it is utmost important that you do not delete/modify these files at any given point of time. In case files are becoming to large to be accepted, please execute the history clearence script i.e. clr_hsty_util to clear the history at one go, it is a complete online operation and need no downtime in monitoring as such.
+
+***Wrong Alert Avoidance***
+
+Scoped for Service Monitoring only.
+
+The utility relies on Cloudera Manager's alerting mechanism to detect unhealthy services. But due to network issue and instantanious short lived problem you might land up in recieving to many alerts. This is more applicable as Service Monitoring is in general executed more frequently.
+
+Thus to avoid wrong alerts the utility has the options to configure a number of unhealthy counts to consider a service to be reported as unhealty. This count is configurable in the property file ([PROPERTY] hadoop.services.monitorhistory) and in case not used should be kept to 1 which is report on first detection mode. It is a tunable value and increasing and decreasing will be take effect automatically without any additional care.
+
+As like all other history this previous issue history is also preserved as a file in the directory history/service_history. At no point files in this directory should be updated or deleted.
 
 ### 2.4. Toubleshooting steps
 
+The script has been build to log fairly verbose log level, so that any issue if occured can be identified using the log only. The log for the two execution type supported is stated below:
+
+SCRIPT MODE     LOCATION        LOG NAME
+==============================================
+sanity          log             check.sanity.log
+service         log             check.service.log
+
+***NOTE*** The tool keeps the log file to a specified size ([PROPERTY] hadoop.monitor.logsizemb) in MB and autorotate keeping one additional backup file.
 
         
 ### 2.5. Incident Management Tool Integration Process
 
+The tool can be easily intergrated with your current enterprise monitoring system to generate Incidents in your standard Enterprise Incident Management system. The below mechanism should be followed for the integration.
 
-        
+* Enable Log Watcher module in your enterprise monitoring system on the monitoring host.
+* Configure Log Watcher to search for pattern ***:ERROR:*** in report file.
+* For reporting Sanity Error Log Watcher should look for pattern in ***Sanity.Error.Report*** and for Service Error Log Watcher should look for pattern in ***Service.Error.Report***, note both files are placed inside history directory.
+
+
 ### 2.6. HA Setup overview
 
-
+The script has the capability to allow a failover node as a backup monitoring host and monitoring will be kicked of from this node once the primary monitoring node will be detected as non responsive. In failover monitoring node you just need to execute **scheduler_failover** launcher script in the exact same schedule as the primary monitoring node. The monitoring on the failover monitoring node will be kicked of only when the primary node is unreachable or non responsive.
 
 
 ## 3. Property file overview and details of property monitored
+
+The propery file is the key to configure monitoring for your environment. The blank property file ***check_hadoop.prop*** is extensively commented to explain each and every property in quite detail fashion along with sample value.
 
 
 
@@ -177,4 +210,4 @@ Now it is hard to believe that you will get 24/7 Support thats too much to ask f
 
 Reach Me: sanmuk21@gmail.com
 
-Best of luck. Happy Monitoring your Hadoop Cluster.
+Best of luck. Happy Monitoring your CDH Hadoop Cluster.
