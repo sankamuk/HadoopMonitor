@@ -134,7 +134,7 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 3 hours*** using Unix default scheduler Crontab.
 
-"* */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log"
+> * */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log
 
 ***Service Check***
 
@@ -146,7 +146,7 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 5 minute*** using Unix default scheduler Crontab.
 
-"*/5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log"
+> */5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log
 
 
 
@@ -174,10 +174,10 @@ As like all other history this previous issue history is also preserved as a fil
 
 The script has been build to log fairly verbose log level, so that any issue if occured can be identified using the log only. The log for the two execution type supported is stated below:
 
-SCRIPT MODE     LOCATION        LOG NAME
-==============================================
-sanity          log             check.sanity.log
-service         log             check.service.log
+SCRIPT MODE | LOCATION | LOG NAME
+--- | --- | ---
+sanity | log | **check.sanity.log**
+service | log | **check.service.log**
 
 ***NOTE*** The tool keeps the log file to a specified size ([PROPERTY] hadoop.monitor.logsizemb) in MB and autorotate keeping one additional backup file.
 
