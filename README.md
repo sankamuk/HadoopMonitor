@@ -134,7 +134,7 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 3 hours*** using Unix default scheduler Crontab.
 
-- * */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log
+"* */3 * * * [SCRIPT HOME]/scheduler sanity >> [SCRIPT HOME]/log/sanity.cron.log 2>> [SCRIPT HOME]/log/sanity.cron.log"
 
 ***Service Check***
 
@@ -146,7 +146,7 @@ To setup your environment for Sanity Check you should first setup the configurat
 
 ***NOTE:*** Its imporatant to understand that just executing the monitor will not allow you to continuously monitor the environment and we should setup some kind of repeated execution mechanism via your Enterprise Scheduler, e.g. ControlM. As a sample setup the below example will help you execute the monitor in a periodically basis in a ***once every 5 minute*** using Unix default scheduler Crontab.
 
-- */5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log
+"*/5 * * * * [SCRIPT HOME]/scheduler service >> [SCRIPT HOME]/log/service.cron.log 2>> [SCRIPT HOME]/log/service.cron.log"
 
 
 
