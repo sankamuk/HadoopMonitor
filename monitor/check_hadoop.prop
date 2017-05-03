@@ -1,0 +1,151 @@
+######################################################################################################################################
+# USAGE   : Primary property file for monitor utility.
+#           WARNING: Please do not delete any property or update without understanding impact.
+# VERSION : 1.0
+# DATED   : 26 June, 2016
+######################################################################################################################################
+
+# The host where primary monitor script is running. Only required for failover setup. On primary host this has not significance.
+# Eg Value: Hostname
+hadoop.monitor.primary=
+
+# The number of hirtory to consider for considering service failure as an alert. The history files are preservered in folder history/service_history. 
+# Eg Value: 1 (One signifies alert generated on first issue detection)
+hadoop.services.monitorhistory=
+
+# The size of the log file. Note there will be only one backup log preserved and the size signifies the size at which primary log will be rolled over.
+# Eg Value: 512 (Size in MB)
+hadoop.monitor.logsizemb=
+
+# The mailing list for info/alert mails. If multiple recipient required it should be comma separated.
+# Eg Value: sanmuk21@gmail.com, sankar.mukherjee@accenture.com
+# hadoop.mail.to=sanmuk21@gmail.com,sanmuk@live.in
+hadoop.mail.to=
+
+# If mail required for Iformation purpose of tool execution. If set to no then only alert mails will be published.
+# Eg Value: yes (Even information mail of status will be send to mail)
+hadoop.mail.onsucess=
+
+# The threashold time the tool expects the service check should complete. In case it does not it considers it to be hung and generates a alert.
+# Eg Value: 2 (Minute to revalidate if the check has completed else it considers the check has hung)
+hadoop.monitor.exec.time.check_service=
+
+# The threashold time the tool expects the sanity check should complete. In case it does not it considers it to be hung and generates a alert.
+# Eg Value: 2 (Minute to revalidate if the check has completed else it considers the check has hung)
+hadoop.monitor.exec.time.check_sanity=
+
+# Hadoop binary home directory
+# Eg Value: /opt/cloudera/parcels/CDH/lib/hadoop
+hadoop.home.dir=
+
+# Hadoop Java Home directory
+# Eg Value: /usr/java/jdk1.7.0_67-cloudera
+hadoop.java.dir=
+
+# Hadoop Cluster is secured or non secured
+# Eg Value: enable (Cluster is secure eneble)
+hadoop.security.status=
+
+# The user id to initiate Kerberos principle for, the corresponding keytab file should datastore/<User Name>.keytab else user principle can be initalised.
+# Eg Value: UserId (lower case user id)
+hadoop.kerberos.principal=
+
+# The Kerberos domain name. 
+# Eg Value: SANMUK.COM (Should be in Upper case as per convention)
+hadoop.kerberos.dmnm=
+
+# The user id to be used to connect to CM URL. This should be having admin right.
+# Eg Value: sankar123
+hadoop.admin.user=
+
+# The password for the above user. Please note the password should be encrypted using the utility passwd_util provided by tool
+# Eg Value: Encrypted Password
+hadoop.admin.passwd=
+
+# The Name is the Cluster.
+# Eg Value: CDH-AMER-DEV-Shared1 (Cluster Name)
+hadoop.cluster.name=
+
+# The Host where Cloudera Manager is hosted. This will be used to fetch data from CM API.
+# Eg Value: sankarhost.example.com (CM Host Name)
+hadoop.clouderamanager.host=
+
+# The services that will be monitored by this utily. Add additional services that need to be monitored.
+# Eg Value: hdfs,hive,yarn,solr,impala,hue,spark,sentry,zookeeper,oozie (Service Names List)
+hadoop.services.monitor=hdfs,hive,yarn,solr,impala,hue,spark,sentry,zookeeper,oozie
+
+# The percentage of HDFS usage that will be consider for alert. 
+# Eg Value: 90 (Above 90% HDFS usage will be alert condition)
+hadoop.hdfs.usg.threshld=
+
+# The space usage of perticular normal user in GB above which is considered for alert.
+# Eg Value: 100 (GB)
+hadoop.hdfs.usr.threshld=
+
+# The space usage of perticular service user in GB above which is considered for alert.
+# Eg Value: 100 (GB)
+hadoop.hdfs.srvacc.threshld=
+
+# The space usage of /tmp directory in HDFS in GB above which is considered for alert.
+# Eg Value: 100 (GB)
+hadoop.hdfs.tmp.threshld=
+
+# The database to connect to do a sample query and monitor response time for Hive Sanity Check
+# Eg Value: TEST_DB (DB Name)
+hadoop.hive.database=
+
+# The table to do a sample query and monitor response time for Hive Sanity Check
+# Eg Value: TEST_TBL (Table Name)
+hadoop.hive.table=
+
+# The host name to build the Hive JDBC connectivity URL. HOST of your Hive Server2 instance.
+# Eg Value: sankarhost.example.com (HS2 Host Name)
+hadoop.hive.host=
+
+# The threshold for a health Hive query execution time through Hive CLI.
+# Eg Value: 15 (Seconds)
+hadoop.hive.cli.qryexectm=
+
+# The threshold for a health Hive query execution time through Hive JDBC (beeline).
+# Eg Value: 15 (Seconds)
+hadoop.hive.belne.qryexectm=
+
+# The threshold for a health Hive query execution time through Hive WebHCat.
+# Eg Value: 15 (Seconds)
+hadoop.hive.whcat.qryexectm=
+
+# The number of Yarn Job above which when waiting in ACCEPTED Status should generate an ALERT.
+# Eg Value: 5 (More than 5 Jobs waiting in ACCEPTED state will generate an alert)
+hadoop.yarn.app.acceptcnt=
+
+# The amount of time tool wait to compare two snapshot to identify a job is in hung state or not.
+# Eg Value: 5 (Job not showing any progress after 5 minute will be condidered and reported as hung)
+hadoop.yarn.app.snpcomptm=
+
+# The Host where Hue Service is running. The tool monitor the memory consumption of Hue Service.
+# Eg Value: sankarhost.example.com (HUE Host Name)
+hadoop.hue.service.host=
+
+# The overall percentage of Host Physical Memory consumed by Hue Process that is considered for alert generation.
+# Eg Value: 5 (More than 5% of host memory used by HUE process will trigger an alert)
+hadoop.hue.memusg.threshld=
+
+# If Hue Memory monitoring need to be turned on.
+# Eg Value: no (HUE memory monitoring will not be done)
+hadoop.hue.memusg.monitor=
+
+# The list for Host that will be monitored for health check. The health status will be fetched from Cloudera Manager directly.
+# Eg Value: sankarhost1.example.com,sankarhost2.example.com (Comma separated list of host)
+hadoop.host.monitor.list=
+
+# If Host monitoring need to be turned on.
+# Eg Value: no (Host monitoring will not be done)
+hadoop.host.monitor.enable=
+
+# The number of Hive Server2 active connection in established state.
+# Eg Value: 50 (More than 50 established connection to Hive Server2 will through an alert)
+hadoop.hive.connct.cnt=
+
+# The number of minute after which application will be considered long running.
+# Eg Value: 60 (More than 60 minute job will be conserver for long running)
+hadoop.yarn.job.longrunning=

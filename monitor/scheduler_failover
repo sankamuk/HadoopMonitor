@@ -1,0 +1,70 @@
+#!/bin/bash
+######################################################################################################################################
+# SCRIPT  : This script helps to schedule the Hadoop Cluster monitoring script.
+# USAGE   : scheduler [service/sanity]
+#           NOTE: Property file should be presnt defining if cluster is secure and if yes the kerberos config.
+# VERSION : 1.0
+# DATED   : 26 June, 2016
+######################################################################################################################################
+
+# Initialization section
+scpt_hm=$(cd $(dirname $0);pwd)
+if [ $# -ne 1 ] ; then
+        echo "ERROR: Required parameter not passed!!!"
+        exit 1
+fi
+run_mode="check_$1"
+log_name="check.$1"
+
+if [ ! -f ${scpt_hm}/check_hadoop.prop ] ; then
+	echo "ERROR: Property file absent, thus aborting!!!"
+        exit 1
+fi
+prmy_node=$(grep ^hadoop.monitor.primary ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+mail_id=$(grep ^hadoop.mail.to ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+
+# Validate if primary node down
+primry_stat=$(ping -c 1 ${prmy_node} | grep icmp* | wc -l)
+if [ ${primry_stat} -eq 0 ] ; then
+	max_logsz=$(grep ^hadoop.monitor.logsizemb ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+	max_exe_tm=$(grep ^hadoop.monitor.exec.time.${run_mode} ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+
+	# Validate if previous execution still running(hung detection)
+	prev_exec=$(ps -ef | grep -v grep | grep ${run_mode})
+	if [ -n "${prev_exec}" ] ; then
+        	echo "ALERT: Previous execution of monitoring script (${run_mode}) still executing." | /bin/mailx -s "ALERT - Hadoop Cluster - $(hostname)" -r HadoopAdmin "${mail_id}"
+	        exit 1
+	fi
+
+	# Rotate log file if required (File above required size will be rotated and one backup will be kept)
+	[[ -f ${scpt_hm}/log/${log_name}.log ]] && [[ `du -sm ${scpt_hm}/log/${log_name}.log | awk '{ print $1 }'` -gt ${max_logsz} ]] && mv ${scpt_hm}/log/${log_name}.log ${scpt_hm}/log/${log_name}.1.log
+
+	# Initiate new execution
+	echo "======================================= START EXECUTION : `date` =======================================" >> ${scpt_hm}/log/${log_name}.log
+
+	# Excute the monitor script in background
+	${scpt_hm}/${run_mode} >> ${scpt_hm}/log/${log_name}.log 2>> ${scpt_hm}/log/${log_name}.log &
+
+	# Wait for 10 minutes to allow script to finish
+	sleep ${max_exe_tm}m
+
+	# Validate if current execution still running(hung detection)
+	cur_exec=$(ps -ef | grep -v grep | grep ${run_mode})
+	if [ -n "${cur_exec}" ] ; then
+        	echo "ALERT: Current execution of monitoring script (${run_mode}) still executing." | /bin/mailx -s "ALERT - Hadoop Cluster - $(hostname)" -r HadoopAdmin "${mail_id}"
+	        exit 1
+	fi
+
+	#  Validate if current execution completed successfully(error detection)
+	tail -1 ${scpt_hm}/log/${log_name}.log | grep -q "Execution Completed"
+	if [ $? -ne 0 ] ; then
+		echo "ALERT: Current execution of monitoring script (${run_mode}) not completed successfully." | /bin/mailx -s "ALERT - Hadoop Cluster - $(hostname)" -r HadoopAdmin "${mail_id}"
+	        exit 1
+	fi
+else
+        echo "Primary node active thus clear any history statistics gathered."
+        rm -f ${scpt_hm}/history/service_history/*
+fi
+
+# Complete execution successfully
+exit 0

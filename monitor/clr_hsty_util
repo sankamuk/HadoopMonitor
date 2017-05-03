@@ -1,0 +1,38 @@
+#!/bin/bash
+#######################################################################################################
+# SCRIPT : To be used to clear tool history. Note one backup copy if history will be stored in archive.
+# USAGE  : clr_hsty_util
+# DATED  : 25 June, 2016
+# VERSION: 1.0
+#######################################################################################################
+
+scpt_hm=$(cd $(dirname $0);pwd)
+[ ! -d ${scpt_hm}/history/archive ] && mkdir -p ${scpt_hm}/history/archive
+echo "History Management Utility"
+echo "=========================="
+echo ""
+echo "Note: Complete unused history will be cleared and archived in archive directory."
+echo ""
+grep -v ^$ ${scpt_hm}/history/Service.Error.Report | tail -1 > ${scpt_hm}/history/Service.Error.Report.N
+grep -v ^$ ${scpt_hm}/history/Sanity.Error.Report | tail -1 > ${scpt_hm}/history/Sanity.Error.Report.N
+
+echo "Backing up old history"
+rm -f ${scpt_hm}/history/archive/*.Error.*
+cp ${scpt_hm}/history/Service.Error.Report ${scpt_hm}/history/archive/Service.Error.Report
+cp ${scpt_hm}/history/Service.Error.DB ${scpt_hm}/history/archive/Service.Error.DB
+cp ${scpt_hm}/history/Sanity.Error.Report ${scpt_hm}/history/archive/Sanity.Error.Report
+cp ${scpt_hm}/history/Sanity.Error.DB ${scpt_hm}/history/archive/Sanity.Error.DB
+if [ -f ${scpt_hm}/history/archive/Service.Error.Report -a -f ${scpt_hm}/history/archive/Sanity.Error.Report ] ; then
+	echo "Successfully backedup the old history"
+else
+	echo "Error in backing up old history, exiting setup please backup history manually before clearing history!!!"
+	rm -f ${scpt_hm}/history/Service.Error.Report.N ${scpt_hm}/history/Sanity.Error.Report.N
+	exit 1
+fi
+
+echo "Starting to clear history"
+mv ${scpt_hm}/history/Service.Error.Report.N ${scpt_hm}/history/Service.Error.Report
+> ${scpt_hm}/history/Service.Error.DB
+mv ${scpt_hm}/history/Sanity.Error.Report.N ${scpt_hm}/history/Sanity.Error.Report
+> ${scpt_hm}/history/Sanity.Error.DB
+echo "Successfully completed history clearence. Validate history folder size."

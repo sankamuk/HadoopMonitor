@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+</head>
+<body>
+<h1> <center>Hadoop Cluster Services Monitoring Report ( @@@_CDH_CLUSTER_NAME_@@@ )</center> </h1> <br>
+
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>CLOUDERA MANAGER HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Cloudera Manager Service Health</td>
+    <td bgcolor="@@@_CM_SRV_COLOR_@@@" align="center" width="20%">@@@_CM_SRV_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_CM_SRV_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HDFS HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_HDFS_SERVICE_COLOR_@@@" align="center" width="20%">@@@_HDFS_SERVICE_HEALTH_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">NameNode's Health</td>
+    <td bgcolor="@@@_HDFS_HA_NAMENODE_COLOR_@@@" align="center" width="20%">@@@_HDFS_HA_NAMENODE_HEALTH_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_HA_NAMENODE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">DataNode's Health</td>
+    <td bgcolor="@@@_HDFS_DATA_NODES_COLOR_@@@" align="center" width="20%">@@@_HDFS_DATA_NODES_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_DATA_NODES_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HIVE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_HIVE_SERVICE_COLOR_@@@" align="center" width="20%">@@@_HIVE_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Hive Server2's Health</td>
+    <td bgcolor="@@@_HIVE_HIVESERVER2S_COLOR_@@@" align="center" width="20%">@@@_HIVE_HIVESERVER2S_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_HIVESERVER2S_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Hive Metastore Health</td>
+    <td bgcolor="@@@_HIVE_HIVEMETASTORES_COLOR_@@@" align="center" width="20%">@@@_HIVE_HIVEMETASTORES_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_HIVEMETASTORES_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Hive WebHCat Health</td>
+    <td bgcolor="@@@_HIVE_WEBHCATS_COLOR_@@@" align="center" width="20%">@@@_HIVE_WEBHCATS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_WEBHCATS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>YARN HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_YARN_SERVICE_COLOR_@@@" align="center" width="20%">@@@_YARN_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_YARN_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Resource Manager Health</td>
+    <td bgcolor="@@@_YARN_RESOURCEMANAGERS_COLOR_@@@" align="center" width="20%">@@@_YARN_RESOURCEMANAGERS_HEALTH_@@@</td>
+    <td align="center" width="40%">@@@_YARN_RESOURCEMANAGERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Node Manager Health</td>
+    <td bgcolor="@@@_YARN_NODE_MANAGERS_COLOR_@@@" align="center" width="20%">@@@_YARN_NODE_MANAGERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_YARN_NODE_MANAGERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Job History Server Health</td>
+    <td bgcolor="@@@_YARN_JOBHISTORY_COLOR_@@@" align="center" width="20%">@@@_YARN_JOBHISTORY_HEALTH_@@@</td>
+    <td align="center" width="40%">@@@_YARN_JOBHISTORY_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>SOLR HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_SOLR_SERVICE_COLOR_@@@" align="center" width="20%">@@@_SOLR_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SOLR_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Solr Servers Health</td>
+    <td bgcolor="@@@_SOLR_SOLR_SERVERS_COLOR_@@@" align="center" width="20%">@@@_SOLR_SOLR_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SOLR_SOLR_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>IMPALA HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_IMPALA_SERVICE_COLOR_@@@" align="center" width="20%">@@@_IMPALA_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_IMPALA_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Impala Catalog Server Health</td>
+    <td bgcolor="@@@_IMPL_CATL_SERVERS_COLOR_@@@" align="center" width="20%">@@@_IMPL_CATL_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_IMPL_CATL_SERVERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Impala Daemon Health</td>
+    <td bgcolor="@@@_IMPL_DM_SERVERS_COLOR_@@@" align="center" width="20%">@@@_IMPL_DM_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_IMPL_DM_SERVERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Impala StateStore Health</td>
+    <td bgcolor="@@@_IMPL_ST_SERVERS_COLOR_@@@" align="center" width="20%">@@@_IMPL_ST_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_IMPL_ST_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HUE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_HUE_SERVICE_COLOR_@@@" align="center" width="20%">@@@_HUE_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HUE_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Hue Server Health</td>
+    <td bgcolor="@@@_HUE_SERVERS_COLOR_@@@" align="center" width="20%">@@@_HUE_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HUE_SERVERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Kerberos Ticket Renewer Health</td>
+    <td bgcolor="@@@_HUE_KT_SERVERS_COLOR_@@@" align="center" width="20%">@@@_HUE_KT_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HUE_KT_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>SPARK HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_SPARK_SERVICE_COLOR_@@@" align="center" width="20%">@@@_SPARK_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SPARK_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Spark Server Health</td>
+    <td bgcolor="@@@_SPARK_SERVERS_COLOR_@@@" align="center" width="20%">@@@_SPARK_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SPARK_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>SENTRY HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_SENTRY_SERVICE_COLOR_@@@" align="center" width="20%">@@@_SENTRY_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SENTRY_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Sentry Server Health</td>
+    <td bgcolor="@@@_SENTRY_SERVERS_COLOR_@@@" align="center" width="20%">@@@_SENTRY_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SENTRY_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>ZOOKEEPER HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_ZOOKPR_SERVICE_COLOR_@@@" align="center" width="20%">@@@_ZOOKPR_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_ZOOKPR_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Zookeeper Server Health</td>
+    <td bgcolor="@@@_ZOOKPR_SERVERS_COLOR_@@@" align="center" width="20%">@@@_ZOOKPR_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_ZOOKPR_SERVERS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Canary Server Health</td>
+    <td bgcolor="@@@_ZOOKPR_CANARY_COLOR_@@@" align="center" width="20%">@@@_ZOOKPR_CANARY_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_ZOOKPR_CANARY_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>OOZIE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_OOZIE_SERVICE_COLOR_@@@" align="center" width="20%">@@@_OOZIE_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_OOZIE_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Oozie Server Health</td>
+    <td bgcolor="@@@_OOZIE_SERVERS_COLOR_@@@" align="center" width="20%">@@@_OOZIE_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_OOZIE_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HBASE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_HBASE_SERVICE_COLOR_@@@" align="center" width="20%">@@@_HBASE_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HBASE_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Master Server Health</td>
+    <td bgcolor="@@@_HBASE_MASTER_COLOR_@@@" align="center" width="20%">@@@_HBASE_MASTER_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HBASE_MASTER_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">RegionServer Server Health</td>
+    <td bgcolor="@@@_HBASE_REGION_SERVERS_COLOR_@@@" align="center" width="20%">@@@_HBASE_REGION_SERVERS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HBASE_REGION_SERVERS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>SQOOP HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_SQOOP_SERVICE_COLOR_@@@" align="center" width="20%">@@@_SQOOP_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SQOOP_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Sqoop 2 Server Health</td>
+    <td bgcolor="@@@_SQOOP_SERVER_COLOR_@@@" align="center" width="20%">@@@_SQOOP_SERVER_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SQOOP_SERVER_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>FLUME HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_FLUME_SERVICE_COLOR_@@@" align="center" width="20%">@@@_FLUME_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_FLUME_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Flume Agent Health</td>
+    <td bgcolor="@@@_FLUME_AGENTS_COLOR_@@@" align="center" width="20%">@@@_FLUME_AGENTS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_FLUME_AGENTS_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>KAFKA HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Service</td>
+    <td bgcolor="@@@_KAFKA_SERVICE_COLOR_@@@" align="center" width="20%">@@@_KAFKA_SERVICE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_KAFKA_SERVICE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center" width="40%">Kafka Server Health</td>
+    <td bgcolor="@@@_KAFKA_HEALTH_COLOR_@@@" align="center" width="20%">@@@_KAFKA_HEALTH_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_KAFKA_HEALTH_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+</body>
+</html>
+

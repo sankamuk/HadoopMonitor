@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+</head>
+<body>
+<h1> <center>Hadoop Cluster Monitoring Report ( @@@_CDH_CLUSTER_NAME_@@@ )</center> </h1> <br>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HDFS HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center">Disk Usage</td>
+    <td bgcolor="@@@_HDFS_DISKUSAGE_REPORT_COLOR_@@@" align="center" width="20%">@@@_HDFS_DISKUSAGE_REPORT_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_DISKUSAGE_REPORT_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Corrupt Block</td>
+    <td bgcolor="@@@_HDFS_CORRUPT_BLOCK_COLOR_@@@" align="center" width="20%">@@@_HDFS_CORRUPT_BLOCK_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_CORRUPT_BLOCK_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Under Replicated Block</td>
+    <td bgcolor="@@@_HDFS_UNDERREPLICA_BLOCK_COLOR_@@@" align="center" width="20%">@@@_HDFS_UNDERREPLICA_BLOCK_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HDFS_UNDERREPLICA_BLOCK_REMARK_@@@</td>
+  </tr>
+</table>
+
+<br>&nbsp;
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HDFS SPACE USAGE STATISTICS</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center">Normal User</td>
+    <td bgcolor="@@@_NORMAL_ACCNT_DISKUSAGE_COLOR_@@@" align="center" width="20%">@@@_NORMAL_ACCNT_DISKUSAGE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_NORMAL_ACCNT_DISKUSAGE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Service User</td>
+   <td bgcolor="@@@_SERVICE_ACCNT_DISKUSAGE_COLOR_@@@" align="center" width="20%">@@@_SERVICE_ACCNT_DISKUSAGE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_SERVICE_ACCNT_DISKUSAGE_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Temp Directory</td>
+    <td bgcolor="@@@_TEMP_DIR_DISKUSAGE_COLOR_@@@" align="center" width="20%">@@@_TEMP_DIR_DISKUSAGE_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_TEMP_DIR_DISKUSAGE_REMARK_@@@</td>
+  </tr>
+</table>
+<br>&nbsp;
+
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HIVE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center">Hive CLI</td>
+    <td bgcolor="@@@_HIVE_CLI_ACCESS_COLOR_@@@" align="center" width="20%">@@@_HIVE_CLI_ACCESS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_CLI_ACCESS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Beeline (Jdbc)</td>
+    <td bgcolor="@@@_HIVE_JDBC_ACCESS_COLOR_@@@" align="center" width="20%">@@@_HIVE_JDBC_ACCESS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_JDBC_ACCESS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">HCat</td>
+    <td bgcolor="@@@_HIVE_HCAT_ACCESS_COLOR_@@@" align="center" width="20%">@@@_HIVE_HCAT_ACCESS_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_HCAT_ACCESS_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Hive Server2 Connection</td>
+    <td bgcolor="@@@_HIVE_SRV2_CONTN_COLOR_@@@" align="center" width="20%">@@@_HIVE_SRV2_CONTN_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HIVE_SRV2_CONTN_REMARK_@@@</td>
+  </tr>
+</table>
+<br>&nbsp;
+
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>YARN APPLICATION HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Application Acepted States</td>
+    <td bgcolor="@@@_YARN_APP_NUMBER_COLOR_@@@" align="center" width="20%">@@@_YARN_APP_NUMBER_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_YARN_APP_NUMBER_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Hang States</td>
+    <td bgcolor="@@@_YARN_APP_HANG_REPORT_COLOR_@@@" align="center" width="20%">@@@_YARN_APP_HANG_REPORT_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_YARN_APP_HANG_REPORT_REMARK_@@@</td>
+  </tr>
+<tr>
+    <td align="center">Long Running Job</td>
+    <td bgcolor="@@@_YARN_APP_LNGRUN_REPORT_COLOR_@@@" align="center" width="20%">@@@_YARN_APP_LNGRUN_REPORT_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_YARN_APP_LNGRUN_REPORT_REMARK_@@@</td>
+  </tr>
+</table>
+<br>&nbsp;
+
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>HUE HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Hue Process (Memory)</td>
+    <td bgcolor="@@@_HUE_MEMORY_COLOR_@@@" align="center" width="20%">@@@_HUE_MEMORY_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_HUE_MEMORY_REMARK_@@@</td>
+  </tr>
+</table>
+<br>&nbsp;
+
+<table style="width:80%"  border="1" align="center">
+<tr>
+<td colspan="3" align="center" bgcolor="AFBCBE"><b>WORKER HOST HEALTH</b></td>
+</tr>
+  <tr bgcolor="BBF1FA">
+    <th >Parameter</th>
+    <th>Status</th>
+    <th>Remarks</th>
+  </tr>
+<tr>
+    <td align="center" width="40%">Worker Node Health</td>
+    <td bgcolor="@@@_WORKER_HOST_HEALTH_COLOR_@@@" align="center" width="20%">@@@_WORKER_HOST_HEALTH_STATUS_@@@</td>
+    <td align="center" width="40%">@@@_WORKER_HOST_HEALTH_REMARK_@@@</td>
+  </tr>
+</table>
+<br>&nbsp;
+
+</body>
+</html>
+

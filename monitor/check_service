@@ -1,0 +1,1049 @@
+#!/bin/bash
+######################################################################################################################################
+# SCRIPT  : This script when executed will monitor complete Hadoop Cluster Services health.
+# USAGE   : check_service 
+#           NOTE: Property file should be presnt defining if cluster is secure and if yes the kerberos config.
+# VERSION : 1.2
+# DATED   : 20 July, 2016
+######################################################################################################################################
+
+#####################################################################################################
+# Initialization section
+#####################################################################################################
+
+scpt_hm=$(cd $(dirname $0);pwd)
+echo "[`date`] Script home detected $scpt_hm"
+if [ -f ${scpt_hm}/check_hadoop.prop ] ; then
+        echo "[`date`] Proporty file identified, ${scpt_hm}/check_hadoop.prop."
+        echo "----------------------------------------------------------------"
+        cat ${scpt_hm}/check_hadoop.prop
+        echo "----------------------------------------------------------------"
+else
+        echo "[`date`] Property file absent thus exiting ...!!!"
+        exit 1
+fi
+HADOOP_HOME=$(grep ^hadoop.home.dir ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+JAVA_HOME=$(grep ^hadoop.java.dir ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+is_sec=$(grep ^hadoop.security.status ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+if [ "${is_sec}" == "enable" ] ; then
+        princ_nm=$(grep ^hadoop.kerberos.principal ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+fi
+krb_dmnm=$(grep ^hadoop.kerberos.dmnm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+clstr_nm=$(grep ^hadoop.cluster.name ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+cm_srv_hst=$(grep ^hadoop.clouderamanager.host ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+serv_mon_lst=$(grep ^hadoop.services.monitor ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+mail_id=$(grep ^hadoop.mail.to ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+sucs_mail=$(grep ^hadoop.mail.onsucess ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_user=$(grep ^hadoop.admin.user ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_passwd=$(grep ^hadoop.admin.passwd ${scpt_hm}/check_hadoop.prop | cut -d"=" -f2- | openssl enc -aes-256-cbc -a -d -salt -pass pass:Sankar)
+srv_hst_cnt=$(grep ^hadoop.services.monitorhistory ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hstry_log=${scpt_hm}/history/Service.Error.Report
+error_log=${scpt_hm}/history/Service.Error.DB
+temp_mail_body=${scpt_hm}/tmp/service.mail.body.tmp.$$
+exec_stat=${scpt_hm}/history/service_history/`date +%s`
+
+export HADOOP_HOME
+export JAVA_HOME
+if [ "${is_sec}" == "enable" ] ; then
+        kinit -kt "${scpt_hm}/datastore/${princ_nm}.keytab" "${princ_nm}@${krb_dmnm}"
+fi
+
+#####################################################################################################
+# CLOUDERA MANAGER SERVICE Health Check
+#####################################################################################################
+ssh -o StrictHostKeyChecking=no "${cm_srv_hst}" /sbin/service cloudera-scm-server status | grep ^cloudera-scm-server | grep running
+if [ $? -eq 0 ] ; then
+	echo "[`date`] Cloudera Manager servive running."
+	cldr_mgr=0
+else
+	echo "[`date`] Cloudera Manager servive not running."
+	cldr_mgr=1
+fi
+
+#####################################################################################################
+
+#####################################################################################################
+# Service Health Check
+#####################################################################################################
+# HDFS health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq hdfs ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+	hdfs_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/hdfs")
+        hdfs_svc=$(echo ${hdfs_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hdfs_dn=$(echo ${hdfs_stat} | awk -F"HDFS_DATA_NODES_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hdfs_nm=$(echo ${hdfs_stat} | awk -F"HDFS_HA_NAMENODE_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+	hdfs_dn="NOT_MONITORED"; hdfs_nm="NOT_MONITORED"; hdfs_svc="NOT_MONITORED"
+else
+	hdfs_dn="ERROR"; hdfs_nm="ERROR"; hdfs_svc="ERROR"
+fi
+echo "[`date`] HDFS(Service Health):"
+echo "HDFS_SERVICE_STATUS=$hdfs_svc" | tee -a ${exec_stat}
+echo "HDFS_DATA_NODES_HEALTHY=${hdfs_dn}" | tee -a ${exec_stat}
+echo "HDFS_HA_NAMENODE_HEALTH=${hdfs_dn}" | tee -a ${exec_stat}
+
+# Hive health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq hive ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+	hive_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/hive")
+        hv_svc=$(echo ${hive_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hv_mst=$(echo ${hive_stat} | awk -F"HIVE_HIVEMETASTORES_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hv_hs2=$(echo ${hive_stat} | awk -F"HIVE_HIVESERVER2S_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hv_wct=$(echo ${hive_stat} | awk -F"HIVE_WEBHCATS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        hv_mst="NOT_MONITORED"; hv_hs2="NOT_MONITORED"; hv_wct="NOT_MONITORED"; hv_svc="NOT_MONITORED"
+else
+        hv_mst="ERROR"; hv_hs2="ERROR"; hv_wct="ERROR"; hv_svc="ERROR"
+fi
+echo "[`date`] Hive(Service Health):"
+echo "HIVE_SERVICE_STATUS=$hv_svc" | tee -a ${exec_stat}
+echo "HIVE_HIVEMETASTORES_HEALTHY=$hv_mst" | tee -a ${exec_stat}
+echo "HIVE_HIVESERVER2S_HEALTHY=$hv_hs2" | tee -a ${exec_stat}
+echo "HIVE_WEBHCATS_HEALTHY=$hv_wct" | tee -a ${exec_stat}
+
+# Yarn health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq yarn ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+	yn_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/yarn")
+        yn_svc=$(echo ${yn_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	yn_jh=$(echo ${yn_stat} | awk -F"YARN_JOBHISTORY_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	yn_nm=$(echo ${yn_stat} | awk -F"YARN_NODE_MANAGERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	yn_rm=$(echo ${yn_stat} | awk -F"YARN_RESOURCEMANAGERS_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        yn_jh="NOT_MONITORED"; yn_nm="NOT_MONITORED"; yn_rm="NOT_MONITORED"; yn_svc="NOT_MONITORED"
+else
+        yn_jh="ERROR"; yn_nm="ERROR"; yn_rm="ERROR"; yn_svc="ERROR"
+fi
+echo "[`date`] YARN(Service Health):"
+echo "YARN_SERVICE_STATUS=$yn_svc" | tee -a ${exec_stat}
+echo "YARN_JOBHISTORY_HEALTH=$yn_jh" | tee -a ${exec_stat}
+echo "YARN_NODE_MANAGERS_HEALTHY=$yn_nm" | tee -a ${exec_stat}
+echo "YARN_RESOURCEMANAGERS_HEALTH=$yn_rm" | tee -a ${exec_stat}
+
+# Solr health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq solr ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+	slr_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/solr")
+	slr_svc=$(echo ${slr_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	slr_srv=$(echo ${slr_stat} | awk -F"SOLR_SOLR_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        slr_srv="NOT_MONITORED"; slr_svc="NOT_MONITORED"
+else
+        slr_srv="ERROR"; slr_svc="ERROR"
+fi
+echo "[`date`] SOLR(Service Health):"
+echo "SOLR_SERVICE_STATUS=$slr_svc" | tee -a ${exec_stat}
+echo "SOLR_SOLR_SERVERS_HEALTHY=$slr_srv" | tee -a ${exec_stat}
+
+# Impala health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq impala ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        imp_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/impala")
+	imp_svc=$(echo ${imp_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        imp_cat=$(echo ${imp_stat} | awk -F"IMPALA_CATALOGSERVER_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	imp_ds=$(echo ${imp_stat} | awk -F"IMPALA_IMPALADS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	imp_ss=$(echo ${imp_stat} | awk -F"IMPALA_STATESTORE_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        imp_cat="NOT_MONITORED"; imp_ds="NOT_MONITORED"; imp_ss="NOT_MONITORED"; imp_svc="NOT_MONITORED"
+else
+	imp_cat="ERROR"; imp_ds="ERROR"; imp_ss="ERROR"; imp_svc="ERROR"
+fi
+echo "[`date`] IMPALA(Service Health):"
+echo "IMPALA_SERVICE_STATUS=$imp_svc" | tee -a ${exec_stat}
+echo "IMPALA_CATALOGSERVER_HEALTH=$imp_cat" | tee -a ${exec_stat}
+echo "IMPALA_IMPALADS_HEALTHY=$imp_ds" | tee -a ${exec_stat}
+echo "IMPALA_STATESTORE_HEALTH=$imp_ss" | tee -a ${exec_stat}
+
+
+# HUE health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq hue ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        hue_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/hue")
+        hue_svc=$(echo ${hue_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        hue_hs=$(echo ${hue_stat} | awk -F"HUE_HUE_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        hue_ks=$(echo ${hue_stat} | awk -F"HUE_KT_RENEWERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        hue_hs="NOT_MONITORED"; hue_ks="NOT_MONITORED"; hue_svc="NOT_MONITORED"
+else
+	hue_hs="ERROR"; hue_ks="ERROR"; hue_svc="ERROR"
+fi
+echo "[`date`] HUE(Service Health):"
+echo "HUE_SERVICE_STATUS=$hue_svc" | tee -a ${exec_stat}
+echo "HUE_HUE_SERVERS_HEALTHY=$hue_hs" | tee -a ${exec_stat}
+echo "HUE_KT_RENEWERS_HEALTHY=$hue_ks" | tee -a ${exec_stat}
+
+# SPARK health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq spark ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        sprk_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/spark_on_yarn")
+        sprk_svc=$(echo ${sprk_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        sprk_srv=$(echo ${sprk_stat} | awk -F"healthSummary" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        sprk_srv="NOT_MONITORED"; sprk_svc="NOT_MONITORED"
+else
+        sprk_srv="ERROR"; sprk_svc="ERROR"
+fi
+echo "[`date`] SPARK(Service Health): "
+echo "SPARK_SERVICE_STATUS=$sprk_svc" | tee -a ${exec_stat}
+echo "SPARK_Health=$sprk_srv" | tee -a ${exec_stat}
+
+
+# Sentry health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq sentry ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        senty_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/sentry")
+        senty_svc=$(echo ${senty_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        senty_ss=$(echo ${senty_stat} | awk -F"SENTRY_SENTRY_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        senty_ss="NOT_MONITORED"; senty_svc="NOT_MONITORED"
+else
+        senty_ss="ERROR"; senty_svc="ERROR"
+fi
+echo "[`date`] SENTRY(Service Health):"
+echo "SENTRY_SERVICE_STATUS=$senty_svc" | tee -a ${exec_stat}
+echo "SENTRY_SENTRY_SERVERS_HEALTHY=$senty_ss" | tee -a ${exec_stat}
+
+# Zookeper health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq zookeeper ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        zk_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/zookeeper")
+        zk_svc=$(echo ${zk_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        zk_can=$(echo ${zk_stat} | awk -F"ZOOKEEPER_CANARY_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	zk_srv=$(echo ${zk_stat} | awk -F"ZOOKEEPER_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        zk_can="NOT_MONITORED"; zk_srv="NOT_MONITORED"; zk_svc="NOT_MONITORED"
+else
+	zk_can="ERROR"; zk_srv="ERROR"; zk_svc="ERROR"
+fi
+echo "[`date`] ZOOKEEPER(Service Health):"
+echo "ZOOKEEPER_SERVICE_STATUS=$zk_svc" | tee -a ${exec_stat}
+echo "ZOOKEEPER_CANARY_HEALTH=$zk_can" | tee -a ${exec_stat}
+echo "ZOOKEEPER_SERVERS_HEALTHY=$zk_srv"| tee -a ${exec_stat}
+
+# Oozie health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq oozie ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        oz_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/oozie")
+	oz_svc=$(echo ${oz_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        oz_srv=$(echo ${oz_stat} | awk -F"OOZIE_OOZIE_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        oz_srv="NOT_MONITORED"; oz_svc="NOT_MONITORED"
+else
+        oz_srv="ERROR"; oz_svc="ERROR"
+fi
+echo "[`date`] OOZIE(Service Health):"
+echo "OOZIE_SERVICE_STATUS=$oz_svc" | tee -a ${exec_stat}
+echo "OOZIE_SERVERS_HEALTHY=$oz_srv" | tee -a ${exec_stat}
+
+# HBase health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq hbase ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        hb_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/hbase")
+        hb_svc=$(echo ${hb_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        hb_mst=$(echo ${hb_stat} | awk -F"HBASE_MASTER_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	hb_rgn=$(echo ${hb_stat} | awk -F"HBASE_REGION_SERVERS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        hb_mst="NOT_MONITORED"; hb_rgn="NOT_MONITORED"; hb_svc="NOT_MONITORED"
+else
+        hb_mst="ERROR"; hb_rgn="ERROR"; hb_svc="ERROR"
+fi
+echo "[`date`] HBASE(Service Health):"
+echo "HBASE_SERVICE_STATUS=$hb_svc" | tee -a ${exec_stat}
+echo "HBASE_MASTER_HEALTH=$hb_mst" | tee -a ${exec_stat}
+echo "HBASE_REGION_SERVERS_HEALTHY=$hb_rgn" | tee -a ${exec_stat}
+
+# Sqoop health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq sqoop ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        sq_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/sqoop")
+	sq_svc=$(echo ${sq_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        sq_srv=$(echo ${sq_stat} | awk -F"SQOOP_SQOOP_SERVER_HEALTH" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        sq_srv="NOT_MONITORED"; sq_svc="NOT_MONITORED"
+else
+        sq_srv="ERROR"; sq_svc="ERROR"
+fi
+echo "[`date`] Sqoop(Service Health):"
+echo "SQOOP_SERVICE_STATUS=$sq_svc" | tee -a ${exec_stat}
+echo "SQOOP_SERVER_HEALTH=$sq_srv" | tee -a ${exec_stat}
+
+# Flume health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq flume ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        flm_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/flume")
+	flm_svc=$(echo ${flm_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+        flm_agt=$(echo ${flm_stat} | awk -F"FLUME_AGENTS_HEALTHY" '{ print $2 }' | awk -F"}" '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        flm_svc="NOT_MONITORED"; flm_agt="NOT_MONITORED"
+else
+        flm_svc="ERROR"; flm_agt="ERROR"
+fi
+echo "[`date`] FLUME(Service Health):"
+echo "FLUME_SERVICE_STATUS=$flm_svc" | tee -a ${exec_stat}
+echo "FLUME_AGENTS_HEALTHY=$flm_agt" | tee -a ${exec_stat}
+
+# Kafka health check
+rn_stat=$(echo ${serv_mon_lst} | grep -wq kafka ; echo $?)
+if [ ${cldr_mgr} -eq 0 -a ${rn_stat} -eq 0 ] ; then
+        kfk_stat=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/clusters/${clstr_nm}/services/kafka")
+        kfk_svc=$(echo ${kfk_stat} | awk -F"serviceState" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+	kfk_srv=$(echo ${kfk_stat} | awk -F"healthSummary" '{ print $2 }' | awk -F"," '{ print $1 }' | awk -F":" '{ print $2 }' | tr -d '"' | tr -d " ")
+elif [ ${rn_stat} -ne 0 ] ; then
+        kfk_svc="NOT_MONITORED"; kfk_srv="NOT_MONITORED"
+else
+        kfk_svc="ERROR"; kfk_srv="ERROR"
+fi
+echo "[`date`] KAFKA(Service Health):"
+echo "KAFKA_SERVICE_STATUS=$kfk_svc" | tee -a ${exec_stat}
+echo "KAFKA_Health=$kfk_srv" | tee -a ${exec_stat}
+
+
+#####################################################################################################
+# Data analysis and report generation
+#####################################################################################################
+
+final_err=""
+latest_err_str=""
+echo "[`date`] Report generation started."
+cat ${scpt_hm}/service.mail.body > ${temp_mail_body}
+echo "[`date`] Raw mail body before modification:"
+cat ${temp_mail_body}
+
+echo "[`date`] Starting to check sufficient history file(s) present to do analysis."
+if [ `ls -l ${scpt_hm}/history/service_history/ | wc -l` -lt `expr ${srv_hst_cnt} + 1` ] ; then
+	echo "[`date`] Detected less service status file(s) to do analysis. Thus will wait for future execution to analyse with adequete number of service status."
+	rm -f ${scpt_hm}/tmp/service.*.tmp.*
+	echo "[`date`] Execution Completed."	
+	exit 0
+fi
+echo "[`date`] Found `ls -l ${scpt_hm}/history/service_history/ | grep -v ^total | wc -l` history file(s) which is more than ${srv_hst_cnt}, thus proceeding with analysis."
+
+# Checking number of status history file
+echo "[`date`] Starting to clear old history file(s) if present."
+while [ `ls -l ${scpt_hm}/history/service_history/ | wc -l` -gt `expr ${srv_hst_cnt} + 1` ] 
+do
+	flName_srv_hst=$(ls -lt ${scpt_hm}/history/service_history/ | tail -1 | awk '{ print $9 }')
+	echo "[`date`] Deleting old file ${scpt_hm}/history/service_history/${flName_srv_hst}."
+	rm -f ${scpt_hm}/history/service_history/${flName_srv_hst}
+done
+echo "[`date`] After housekeeping we have in total `ls -l ${scpt_hm}/history/service_history/ | grep -v ^total | wc -l` history file(s)."
+
+# Updating Hadoop Cluster Name
+sed -i 's/@@@_CDH_CLUSTER_NAME_@@@/'${clstr_nm}'/g' ${temp_mail_body}
+
+# Cloudera Manager Health
+if [ ${cldr_mgr} -ne 0 ] ; then
+        sed -i 's/@@@_CM_SRV_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_CM_SRV_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_CM_SRV_REMARK_@@@/Servive Not Responding/g' ${temp_mail_body}
+        final_err="CM_SRV,${final_err}"
+        latest_err_str="CM_SRV(Service not Responding),${latest_err_str}"
+else
+        sed -i 's/@@@_CM_SRV_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_CM_SRV_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_CM_SRV_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing HDFS Health
+hdfs_svc_cnt=$(grep "HDFS_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hdfs_svc_cnt} -eq 0 -a "${hdfs_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_HEALTH_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_REMARK_@@@/STATUS:'${hdfs_svc}'/g' ${temp_mail_body}
+        final_err="HDFS_SERVICE,${final_err}"
+        latest_err_str="HDFS_SERVICE(${hdfs_svc}}),${latest_err_str}"
+elif [ "${hdfs_svc}"  == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_HEALTH_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HDFS_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_HEALTH_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hdfs_nm_cnt=$(grep "HDFS_DATA_NODES_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hdfs_nm_cnt} -eq 0 -a "${hdfs_nm}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_HA_NAMENODE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_HEALTH_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_REMARK_@@@/STATUS:'${hdfs_nm}'/g' ${temp_mail_body}
+        final_err="HDFS_HA_NAMENODE,${final_err}"
+        latest_err_str="HDFS_HA_NAMENODE(${hdfs_nm}),${latest_err_str}"
+elif [ "${hdfs_nm}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_HA_NAMENODE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_HEALTH_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HDFS_HA_NAMENODE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_HEALTH_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_HA_NAMENODE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hdfs_dn_cnt=$(grep "HDFS_HA_NAMENODE_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hdfs_dn_cnt} -eq 0 -a "${hdfs_dn}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_DATA_NODES_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_REMARK_@@@/STATUS:'${hdfs_dn}'/g' ${temp_mail_body}
+        final_err="HDFS_DATA_NODES,${final_err}"
+        latest_err_str="HDFS_DATA_NODES(${hdfs_dn}),${latest_err_str}"
+elif [ "${hdfs_dn}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HDFS_DATA_NODES_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HDFS_DATA_NODES_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DATA_NODES_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Hive Service Health
+hv_svc_cnt=$(grep "HIVE_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hv_svc_cnt} -eq 0 -a "${hv_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_REMARK_@@@/STATUS:'${hv_svc}'/g' ${temp_mail_body}
+        final_err="HIVE_SERVICE,${final_err}"
+        latest_err_str="HIVE_SERVICE(${hv_svc}),${latest_err_str}"
+elif [ "${hv_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HIVE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hv_mst_cnt=$(grep "HIVE_HIVEMETASTORES_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hv_mst_cnt} -eq 0  -a "${hv_mst}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_REMARK_@@@/STATUS:'${hv_mst}'/g' ${temp_mail_body}
+        final_err="HIVE_HIVEMETASTORES,${final_err}"
+        latest_err_str="HIVE_HIVEMETASTORES(${hv_mst}),${latest_err_str}"
+elif [ "${hv_mst}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_STATUS_@@@/NOT MONITORED/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVEMETASTORES_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hv_hs2_cnt=$(grep "HIVE_HIVESERVER2S_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hv_hs2_cnt} -eq 0 -a "${hv_hs2}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_HIVESERVER2S_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_REMARK_@@@/STATUS:'${hv_hs2}'/g' ${temp_mail_body}
+        final_err="HIVE_HIVESERVER2S,${final_err}"
+        latest_err_str="HIVE_HIVESERVER2S(${hv_hs2}),${latest_err_str}"
+elif [ "${hv_hs2}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_HIVESERVER2S_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HIVE_HIVESERVER2S_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HIVESERVER2S_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hv_wct_cnt=$(grep "HIVE_WEBHCATS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hv_wct_cnt} -eq 0 -a "${hv_wct}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_WEBHCATS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_REMARK_@@@/STATUS:'${hv_hs2}'/g' ${temp_mail_body}
+        final_err="HIVE_WEBHCATS,${final_err}"
+        latest_err_str="HIVE_WEBHCATS(${hv_wct}),${latest_err_str}"
+elif [ "${hv_wct}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HIVE_WEBHCATS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HIVE_WEBHCATS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_WEBHCATS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Yarn Health
+yn_svc_cnt=$(grep "YARN_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${yn_svc_cnt} -eq 0 -a "${yn_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_REMARK_@@@/STATUS:'${yn_svc}'/g' ${temp_mail_body}
+        final_err="YARN_SERVICE,${final_err}"
+        latest_err_str="YARN_SERVICE(${yn_svc}),${latest_err_str}"
+elif [ "${yn_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_YARN_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+yn_jh_cnt=$(grep "YARN_JOBHISTORY_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${yn_jh_cnt} -eq 0 -a "${yn_jh}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_JOBHISTORY_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_HEALTH_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_REMARK_@@@/Status:'${yn_jh}'/g' ${temp_mail_body}
+        final_err="YARN_JOBHISTORY,${final_err}"
+        latest_err_str="YARN_JOBHISTORY(Status:${yn_jh}),${latest_err_str}"
+elif [ "${yn_jh}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_JOBHISTORY_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_HEALTH_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_YARN_JOBHISTORY_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_HEALTH_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_JOBHISTORY_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+yn_nm_cnt=$(grep "YARN_NODE_MANAGERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${yn_nm_cnt} -eq 0 -a "${yn_nm}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_NODE_MANAGERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_REMARK_@@@/Status:'${yn_nm}'/g' ${temp_mail_body}
+        final_err="YARN_NODE_MANAGERS,${final_err}"
+        latest_err_str="YARN_NODE_MANAGERS(Status:${yn_nm}),${latest_err_str}"
+elif [ "${yn_nm}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_NODE_MANAGERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_YARN_NODE_MANAGERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_NODE_MANAGERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+yn_rm_cnt=$(grep "YARN_RESOURCEMANAGERS_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${yn_rm_cnt} -eq 0 -a "${yn_rm}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_HEALTH_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_REMARK_@@@/Status:'${yn_rm}'/g' ${temp_mail_body}
+        final_err="YARN_RESOURCEMANAGERS,${final_err}"
+        latest_err_str="YARN_RESOURCEMANAGERS(Status:${yn_rm}),${latest_err_str}"
+elif [ "${yn_rm}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_HEALTH_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_HEALTH_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_RESOURCEMANAGERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Solr Health
+slr_svc_cnt=$(grep "SOLR_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${slr_svc_cnt} -eq 0 -a "${slr_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SOLR_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_REMARK_@@@/Status:'${slr_svc}'/g' ${temp_mail_body}
+        final_err="SOLR_SERVICE,${final_err}"
+        latest_err_str="SOLR_SERVICE(${slr_svc}),${latest_err_str}"
+elif [ "${slr_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SOLR_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SOLR_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+slr_srv_cnt=$(grep "SOLR_SOLR_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${slr_srv_cnt} -eq 0 -a "${slr_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_REMARK_@@@/Status:'${slr_srv}'/g' ${temp_mail_body}
+        final_err="SOLR_SERVERS,${final_err}"
+        latest_err_str="SOLR_SERVERS(Status:${slr_srv}),${latest_err_str}"
+elif [ "${slr_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SOLR_SOLR_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Impala Health
+imp_svc_cnt=$(grep "IMPALA_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${imp_svc_cnt} -eq 0 -a "${imp_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPALA_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_REMARK_@@@/Status:'${imp_svc}'/g' ${temp_mail_body}
+        final_err="IMPALA_SERVICE,${final_err}"
+        latest_err_str="IMPALA_SERVICE(${imp_svc}),${latest_err_str}"
+elif [ "${imp_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPALA_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_IMPALA_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPALA_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+imp_cat_cnt=$(grep "IMPALA_CATALOGSERVER_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${imp_cat_cnt} -eq 0 -a "${imp_cat}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_CATL_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_REMARK_@@@/Status:'${imp_cat}'/g' ${temp_mail_body}
+        final_err="IMPALA_CATALOGSERVER,${final_err}"
+        latest_err_str="IMPALA_CATALOGSERVER(${imp_cat}),${latest_err_str}"
+elif [ "${imp_cat}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_CATL_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_IMPL_CATL_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_CATL_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+imp_ds_cnt=$(grep "IMPALA_IMPALADS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${imp_ds_cnt} -eq 0 -a "${imp_ds}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_DM_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_REMARK_@@@/Status:'${imp_ds}'/g' ${temp_mail_body}
+        final_err="IMPALA_IMPALADS,${final_err}"
+        latest_err_str="IMPALA_IMPALADS(${imp_ds}),${latest_err_str}"
+elif [ "${imp_ds}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_DM_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_IMPL_DM_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_DM_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+imp_ss_cnt=$(grep "IMPALA_STATESTORE_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${imp_ss_cnt} -eq 0 -a "${imp_ss}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_ST_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_REMARK_@@@/Status:'${imp_ss}'/g' ${temp_mail_body}
+        final_err="IMPALA_STATESTORE,${final_err}"
+        latest_err_str="IMPALA_STATESTORE(${imp_ss}),${latest_err_str}"
+elif [ "${imp_ss}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_IMPL_ST_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_IMPL_ST_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_IMPL_ST_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing HUE  Health
+hue_svc_cnt=$(grep "HUE_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hue_svc_cnt} -eq 0 -a "${hue_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_REMARK_@@@/Status:'${hue_svc}'/g' ${temp_mail_body}
+        final_err="HUE_SERVICE,${final_err}"
+        latest_err_str="HUE_SERVICE(${hue_svc}),${latest_err_str}"
+elif [ "${hue_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HUE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hue_hs_cnt=$(grep "HUE_HUE_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hue_hs_cnt} -eq 0 -a "${hue_hs}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_REMARK_@@@/Status:'${hue_hs}'/g' ${temp_mail_body}
+        final_err="HUE_SERVERS,${final_err}"
+        latest_err_str="HUE_SERVERS(${hue_hs}),${latest_err_str}"
+elif [ "${hue_hs}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HUE_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hue_ks_cnt=$(grep "HUE_KT_RENEWERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hue_ks_cnt} -eq 0 -a "${hue_ks}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_KT_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_REMARK_@@@/Status:'${hue_ks}'/g' ${temp_mail_body}
+        final_err="HUE_KT_RENEWERS,${final_err}"
+        latest_err_str="HUE_KT_RENEWERS(${hue_ks}),${latest_err_str}"
+elif [ "${hue_ks}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HUE_KT_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HUE_KT_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_KT_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Spark Health
+sprk_svc_cnt=$(grep "SPARK_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${sprk_svc_cnt} -eq 0 -a "${sprk_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SPARK_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_REMARK_@@@/Status:'${sprk_svc}'/g' ${temp_mail_body}
+        final_err="SPARK_SERVICE,${final_err}"
+        latest_err_str="SPARK_SERVICE(${sprk_svc}),${latest_err_str}"
+elif [ "${sprk_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SPARK_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SPARK_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+sprk_srv_cnt=$(grep "SPARK_Health=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${sprk_srv_cnt} -eq 0 -a "${sprk_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SPARK_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_REMARK_@@@/Status:'${sprk_srv}'/g' ${temp_mail_body}
+        final_err="SPARK_HEALTH,${final_err}"
+        latest_err_str="SPARK_HEALTH(${sprk_srv}),${latest_err_str}"
+elif [ "${sprk_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SPARK_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SPARK_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SPARK_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Sentry Health
+senty_svc_cnt=$(grep "SENTRY_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${senty_svc_cnt} -eq 0 -a "${senty_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SENTRY_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_REMARK_@@@/Status:'${senty_svc}'/g' ${temp_mail_body}
+        final_err="SENTRY_SERVICE,${final_err}"
+        latest_err_str="SENTRY_SERVICE(${senty_svc}),${latest_err_str}"
+elif [ "${senty_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SENTRY_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SENTRY_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+senty_ss_cnt=$(grep "SENTRY_SENTRY_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${senty_ss_cnt} -eq 0 -a "${senty_ss}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SENTRY_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_REMARK_@@@/Status:'${senty_ss}'/g' ${temp_mail_body}
+        final_err="SENTRY_SERVERS,${final_err}"
+        latest_err_str="SENTRY_SERVERS(${senty_ss}),${latest_err_str}"
+elif [ "${senty_ss}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SENTRY_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SENTRY_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SENTRY_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Zookeeper Health
+zk_svc_cnt=$(grep "ZOOKEEPER_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${zk_svc_cnt} -eq 0 -a "${zk_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_REMARK_@@@/Status:'${zk_svc}'/g' ${temp_mail_body}
+        final_err="ZOOKEEPER_SERVICE,${final_err}"
+        latest_err_str="ZOOKEEPER_SERVICE(${zk_svc}),${latest_err_str}"
+elif [ "${zk_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_ZOOKPR_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+zk_srv_cnt=$(grep "ZOOKEEPER_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${zk_srv_cnt} -eq 0 -a "${zk_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_REMARK_@@@/Status:'${zk_srv}'/g' ${temp_mail_body}
+        final_err="ZOOKEEPER_SERVERS,${final_err}"
+        latest_err_str="ZOOKEEPER_SERVERS(${zk_srv}),${latest_err_str}"
+elif [ "${zk_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_ZOOKPR_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+zk_can_cnt=$(grep "ZOOKEEPER_CANARY_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${zk_can_cnt} -eq 0 -a "${zk_can}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_CANARY_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_REMARK_@@@/Status:'${zk_can}'/g' ${temp_mail_body}
+        final_err="ZOOKEEPER_CANARY,${final_err}"
+        latest_err_str="ZOOKEEPER_CANARY(${zk_can}),${latest_err_str}"
+elif [ "${zk_can}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_ZOOKPR_CANARY_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_ZOOKPR_CANARY_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_ZOOKPR_CANARY_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Oozie Health
+oz_svc_cnt=$(grep "OOZIE_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${oz_svc_cnt} -eq 0 -a "${oz_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_OOZIE_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_REMARK_@@@/Status:'${oz_svc}'/g' ${temp_mail_body}
+        final_err="OOZIE_SERVICE,${final_err}"
+        latest_err_str="OOZIE_SERVICE(${oz_svc}),${latest_err_str}"
+elif [ "${oz_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_OOZIE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_OOZIE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+oz_srv_cnt=$(grep "OOZIE_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${oz_srv_cnt} -eq 0 -a "${oz_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_OOZIE_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_REMARK_@@@/Status:'${oz_srv}'/g' ${temp_mail_body}
+        final_err="OOZIE_SERVERS,${final_err}"
+        latest_err_str="OOZIE_SERVERS(${oz_srv}),${latest_err_str}"
+elif [ "${oz_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_OOZIE_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_OOZIE_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_OOZIE_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing HBase Health
+hb_svc_cnt=$(grep "HBASE_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hb_svc_cnt} -eq 0 -a "${hb_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_REMARK_@@@/Status:'${hb_svc}'/g' ${temp_mail_body}
+        final_err="HBASE_SERVICE,${final_err}"
+        latest_err_str="HBASE_SERVICE(${hb_svc}),${latest_err_str}"
+elif [ "${hb_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HBASE_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hb_mst_cnt=$(grep "HBASE_MASTER_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hb_mst_cnt} -eq 0 -a "${hb_mst}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_MASTER_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_REMARK_@@@/Status:'${hb_mst}'/g' ${temp_mail_body}
+        final_err="HBASE_MASTER,${final_err}"
+        latest_err_str="HBASE_MASTER(${hb_mst}),${latest_err_str}"
+elif [ "${hb_mst}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_MASTER_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HBASE_MASTER_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_MASTER_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+hb_rgn_cnt=$(grep "HBASE_REGION_SERVERS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${hb_rgn_cnt} -eq 0 -a "${hb_rgn}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_REGION_SERVERS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_REMARK_@@@/Status:'${hb_mst}'/g' ${temp_mail_body}
+        final_err="HBASE_REGION_SERVERS,${final_err}"
+        latest_err_str="HBASE_REGION_SERVERS(${hb_rgn}),${latest_err_str}"
+elif [ "${hb_rgn}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_HBASE_REGION_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_HBASE_REGION_SERVERS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HBASE_REGION_SERVERS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Sqoop Health
+sq_svc_cnt=$(grep "SQOOP_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${sq_svc_cnt} -eq 0 -a "${sq_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SQOOP_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_REMARK_@@@/Status:'${sq_svc}'/g' ${temp_mail_body}
+        final_err="SQOOP_SERVICE,${final_err}"
+        latest_err_str="SQOOP_SERVICE(${sq_svc}),${latest_err_str}"
+elif [ "${sq_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SQOOP_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SQOOP_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+sq_srv_cnt=$(grep "SQOOP_SERVER_HEALTH=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${sq_srv_cnt} -eq 0 -a "${sq_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SQOOP_SERVER_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_REMARK_@@@/Status:'${sq_srv}'/g' ${temp_mail_body}
+        final_err="SQOOP_SERVER,${final_err}"
+        latest_err_str="SQOOP_SERVER(${sq_srv}),${latest_err_str}"
+elif [ "${sq_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_SQOOP_SERVER_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_SQOOP_SERVER_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SQOOP_SERVER_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Flume Health
+flm_svc_cnt=$(grep "FLUME_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${flm_svc_cnt} -eq 0 -a "${flm_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_FLUME_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_REMARK_@@@/Status:'${flm_svc}'/g' ${temp_mail_body}
+        final_err="FLUME_SERVICE,${final_err}"
+        latest_err_str="FLUME_SERVICE(${flm_svc}),${latest_err_str}"
+elif [ "${flm_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_FLUME_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_FLUME_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+flm_agt_cnt=$(grep "FLUME_AGENTS_HEALTHY=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${flm_agt_cnt} -eq 0 -a "${flm_agt}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_FLUME_AGENTS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_REMARK_@@@/Status:'${flm_agt}'/g' ${temp_mail_body}
+        final_err="FLUME_AGENTS,${final_err}"
+        latest_err_str="FLUME_AGENTS(${flm_agt}),${latest_err_str}"
+elif [ "${flm_agt}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_FLUME_AGENTS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_FLUME_AGENTS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_FLUME_AGENTS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Kafka Health
+kfk_svc_cnt=$(grep "KAFKA_SERVICE_STATUS=STARTED" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${kfk_svc_cnt} -eq 0 -a "${kfk_svc}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_KAFKA_SERVICE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_REMARK_@@@/Status:'${kfk_svc}'/g' ${temp_mail_body}
+        final_err="KAFKA_SERVICE,${final_err}"
+        latest_err_str="KAFKA_SERVICE(${kfk_svc}),${latest_err_str}"
+elif [ "${kfk_svc}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_KAFKA_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_KAFKA_SERVICE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_SERVICE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+kfk_srv_cnt=$(grep "KAFKA_Health=GOOD" ${scpt_hm}/history/service_history/* | wc -l)
+if [ ${kfk_srv_cnt} -eq 0 -a "${kfk_srv}" != "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_KAFKA_HEALTH_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_REMARK_@@@/Status:'${kfk_srv}'/g' ${temp_mail_body}
+        final_err="KAFKA_HEALTH,${final_err}"
+        latest_err_str="KAFKA_HEALTH(${kfk_srv}),${latest_err_str}"
+elif [ "${kfk_srv}" == "NOT_MONITORED" ] ; then
+        sed -i 's/@@@_KAFKA_HEALTH_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_STATUS_@@@/NOT MONITORED/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_REMARK_@@@/None/g' ${temp_mail_body}
+else
+        sed -i 's/@@@_KAFKA_HEALTH_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_KAFKA_HEALTH_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+#####################################################################################################
+# Logging and ERROR reporting
+#####################################################################################################
+
+echo "[`date`] Updated mail body after all modification:"
+cat ${temp_mail_body}
+echo "[`date`] Report generation complete."
+
+issue_mail=no
+echo "[`date`] Logging execution summary."
+if [ -n "${final_err}" ] ; then
+	echo "[`date`] Problem detected in this execution."
+	tail -1 ${hstry_log} | grep ":INFO:" 
+	if [ $? -eq 0 ] ; then
+		echo "[`date`] Last execution was successful."
+		echo "[`date`] :ERROR: (${final_err})" >> ${hstry_log}
+		issue_mail=yes
+	else
+		echo "[`date`] Last execution was also unsuccessful."
+		error_str=$(tail -1 ${hstry_log} | awk -F"(" '{ print $2 }' | awk -F")" '{ print $1 }')
+		error_stat=""
+		for i in `echo ${final_err} | tr "," " "`; do error_stat=$(echo ${error_str} | grep $i); [ $? -ne 0 ] && break ; done
+		if [ -n "${error_stat}" ] ; then
+			echo "[`date`] Current execution detected same or less issues than last one, thus no new case required."
+		else
+			echo "[`date`] Current execution detected more or new issues than last one, thus new case required."
+			echo "[`date`] :ERROR: (${final_err})" >> ${hstry_log}
+			issue_mail=yes
+		fi
+	fi
+	echo "[`date`] :ERROR: ${latest_err_str}" >> ${error_log}
+else
+	echo "[`date`] No issue detected."
+	echo "[`date`] :INFO: (OK)" >> ${hstry_log}
+fi
+
+#####################################################################################################
+# Mailing Section
+#####################################################################################################
+
+hst_nm=$(hostname)
+if [[ -n "${final_err}" ]] && [[ "${issue_mail}" == "yes" ]] ; then
+(
+  echo To: ${mail_id}
+  echo From: HadoopAdmin
+  echo "Content-Type: text/html; "
+  echo "Subject: ALERT - Hadoop Cluster - Service - ${clstr_nm}"
+  echo ""
+  cat ${temp_mail_body}
+) | /usr/sbin/sendmail -t
+elif [[ -z "${final_err}" ]] && [[ "${sucs_mail}" == "yes" ]] ; then
+(
+  echo To: ${mail_id}
+  echo From: HadoopAdmin
+  echo "Content-Type: text/html; "
+  echo "Subject: INFO - Hadoop Cluster - Service - ${clstr_nm}"
+  echo ""
+  cat ${temp_mail_body}
+) | /usr/sbin/sendmail -t
+fi
+
+#####################################################################################################
+# Cleanup
+#####################################################################################################
+rm -f ${scpt_hm}/tmp/service.*.tmp.*
+
+echo "[`date`] Execution Completed."

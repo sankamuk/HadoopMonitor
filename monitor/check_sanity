@@ -1,0 +1,579 @@
+#!/bin/bash
+######################################################################################################################################
+# SCRIPT  : This script when executed will monitor complete Hadoop Cluster health including important services, i.e. HIVE ans SOLR
+# USAGE   : check_hadoop [OUTPUT FILE]
+#           NOTE: Property file should be presnt defining if cluster is secure and if yes the kerberos config.
+# VERSION : 1.1
+#           1.1 - Hue Memory Usage Added along with host monitoring.
+# DATED   : 18 June, 2016
+######################################################################################################################################
+
+#####################################################################################################
+# Initialization section
+#####################################################################################################
+
+scpt_hm=$(cd $(dirname $0);pwd)
+echo "[`date`] Script home detected $scpt_hm"
+if [ -f ${scpt_hm}/check_hadoop.prop ] ; then
+        echo "[`date`] Proporty file identified, ${scpt_hm}/check_hadoop.prop."
+        echo "----------------------------------------------------------------"
+        cat ${scpt_hm}/check_hadoop.prop
+        echo "----------------------------------------------------------------"
+else
+        echo "[`date`] Property file absent thus exiting ...!!!"
+        exit 1
+fi
+HADOOP_HOME=$(grep ^hadoop.home.dir ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+JAVA_HOME=$(grep ^hadoop.java.dir ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+is_sec=$(grep ^hadoop.security.status ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+if [ "${is_sec}" == "enable" ] ; then
+        princ_nm=$(grep ^hadoop.kerberos.principal ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+fi
+krb_dmnm=$(grep ^hadoop.kerberos.dmnm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+clstr_nm=$(grep ^hadoop.cluster.name ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+mail_id=$(grep ^hadoop.mail.to ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+sucs_mail=$(grep ^hadoop.mail.onsucess ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+cm_srv_hst=$(grep ^hadoop.clouderamanager.host ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hdfs_usg_th=$(grep ^hadoop.hdfs.usg.threshld ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hdfs_usr_th=$(grep ^hadoop.hdfs.usr.threshld ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hdfs_srvac_th=$(grep ^hadoop.hdfs.srvacc.threshld ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hdfs_tmp_th=$(grep ^hadoop.hdfs.tmp.threshld ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_db=$(grep ^hadoop.hive.database ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_table=$(grep ^hadoop.hive.table ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_host=$(grep ^hadoop.hive.host ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_user=$(grep ^hadoop.admin.user ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_passwd=$(grep ^hadoop.admin.passwd ${scpt_hm}/check_hadoop.prop | cut -d"=" -f2- | openssl enc -aes-256-cbc -a -d -salt -pass pass:Sankar)
+hive_cli_mxtm=$(grep ^hadoop.hive.cli.qryexectm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_bln_mxtm=$(grep ^hadoop.hive.belne.qryexectm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hive_wct_mxtm=$(grep ^hadoop.hive.whcat.qryexectm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+yn_acc_th=$(grep ^hadoop.yarn.app.acceptcnt ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+yn_hung_tm=$(grep ^hadoop.yarn.app.snpcomptm ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+
+hiv_conn=$(grep ^hadoop.hive.connct.cnt ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hue_host=$(grep ^hadoop.hue.service.host ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hue_mem_th=$(grep ^hadoop.hue.memusg.threshld ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hueToMon=$(grep ^hadoop.hue.memusg.monitor ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+clstr_hst_mon=$(grep ^hadoop.host.monitor.list ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+hstToMon=$(grep ^hadoop.host.monitor.enable ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+lngRunTime=$(grep ^hadoop.yarn.job.longrunning ${scpt_hm}/check_hadoop.prop | awk -F"=" '{ print $2 }')
+
+hcat_sql="use ${hive_db}; show tables;"
+hstry_log=${scpt_hm}/history/Sanity.Error.Report
+error_log=${scpt_hm}/history/Sanity.Error.DB
+temp_dfs_fl=${scpt_hm}/tmp/sanity.script.dfs.tmp.$$
+temp_yarn_fl=${scpt_hm}/tmp/sanity.script.yarn.tmp.$$
+temp_yarn_fl_lt=${scpt_hm}/tmp/sanity.script.yarn.tmp.latest.$$
+temp_hive_sql=${scpt_hm}/tmp/sanity.script.hive.sql.tmp.$$
+temp_hive_out=${scpt_hm}/tmp/sanity.script.hive.out.tmp.$$
+temp_mail_body=${scpt_hm}/tmp/sanity.mail.body.tmp.$$
+
+export HADOOP_HOME
+export JAVA_HOME
+if [ "${is_sec}" == "enable" ] ; then
+        kinit -kt "${scpt_hm}/datastore/${princ_nm}.keytab" "${princ_nm}@${krb_dmnm}"
+fi
+
+#####################################################################################################
+# YARN RUNNING Job snapshot (Will be used later to detect hung job)
+#####################################################################################################
+
+start_tm=$(date +%s)
+yarn application -list | sed '1,2d' > ${temp_yarn_fl}
+echo "======================== YARN JOB LIST INITIAL ========================"
+cat ${temp_yarn_fl}
+echo "======================================================================="
+
+#####################################################################################################
+# HDFS Cluster health check
+#####################################################################################################
+
+hadoop dfsadmin -report > ${temp_dfs_fl}
+echo "======================== DFS ADMIN REPORT ========================"
+cat ${temp_dfs_fl}
+echo "=================================================================="
+total_used=$(grep -m1 "DFS Used%:" ${temp_dfs_fl} | tr -d "%" | awk '{ print $3 }')
+echo "[`date`] Total DFS usage: $total_used"
+corp_block=$(grep -m1 "Blocks with corrupt replicas:" ${temp_dfs_fl} | awk '{ print $5 }')
+echo "[`date`] Total corrupt block: $corp_block"
+undr_rep=$(grep -m1 "Missing blocks:" ${temp_dfs_fl} | awk '{ print $3 }')
+echo "[`date`] Total under replicated block: $undr_rep"
+dead_nd=$(grep -m1 "Dead datanodes" ${temp_dfs_fl} | awk -F"(" '{ print $2 }' | awk -F")" '{ print $1 }')
+echo "[`date`] Total dead datanodes: $dead_nd"
+
+#####################################################################################################
+# HDFS FS Space usage check
+#####################################################################################################
+
+# Section to check /user usgage on HDFS
+serv_usr=$(hadoop fs -du -s -h /user/s*a | grep -v ^0 | awk -vth="$hdfs_srvac_th" '{ if ( $2 == "G" && $1 > th ) print $5 }' | awk -F"/" '{ print $3 }' | tr "\n" ",")
+echo "[`date`] Service account using more then 2 GB usage ${serv_usr}."
+nrml_usr=$(hadoop fs -du -s -h /user/x*a | grep -v ^0 | awk -vth="$hdfs_usr_th" '{ if ( $2 == "G" && $1 > th ) print $5 }' | awk -F"/" '{ print $3 }' | tr "\n" ",")
+if [ -n "${serv_usr}" ] ; then
+        echo "[`date`] Service account using more then $hdfs_srvac_th GB usage ${serv_usr}, check and rectify."
+	echo "==================== Service account Usage ===================="
+	hadoop fs -du -s -h /user/s*a
+        echo "==============================================================="
+fi
+if [ -n "${nrml_usr}" ] ; then
+        echo "[`date`] Normal user account using more then $hdfs_usr_th GB usage ${nrml_usr}, check and rectify."
+        echo "==================== Normal account Usage ===================="
+        hadoop fs -du -s -h /user/x*a 
+        echo "==============================================================="
+fi
+
+# Section to check /tmp usgage on HDFS
+tmp_usg=$(hadoop fs -du -s -h /tmp | awk -vth="$hdfs_tmp_th" '{ if ( $2 == "G" && $1 > th ) print $1 }')
+if [ -n "${tmp_usg}" ] ; then
+        echo "[`date`] Temporary folder using heavy disk space, i.e. more than $hdfs_tmp_th GB utilized."
+        echo "==================== Temp Usage ===================="
+        hadoop fs -du -s -h /tmp
+        echo "===================================================="
+fi
+
+#####################################################################################################
+# HIVE health check
+#####################################################################################################
+
+# Section to check HIVE command line response
+tm_cmd=-1
+echo "select * from ${hive_table}" > ${temp_hive_sql}
+hive --database ${hive_db} -f ${temp_hive_sql} >> ${temp_hive_out} 2>> ${temp_hive_out}
+if [ $? -ne 0 ] ; then
+        echo "[`date`] Error in executing query in hive service."
+        cat ${temp_hive_out}
+else
+        echo "[`date`] Query through Hive command line ran succefully."
+        tail -1 ${temp_hive_out} | grep -q "Time taken:"
+        if [ $? -eq 0 ] ; then
+                tm_cmd=$(tail -1 ${temp_hive_out} | awk '{ print $3 }')
+        fi
+fi
+echo "[`date`] Query time through command line ${tm_cmd}."
+echo "---------------- Raw Output ----------------"
+cat ${temp_hive_out}
+echo "--------------------------------------------"
+rm -f ${temp_hive_out}
+
+# Section to check HIVE JDBC response
+beeline -u "jdbc:hive2://${hive_host}:10000/${hive_db};principal=hive/_HOST@${krb_dmnm}" -n "${hive_user}" -p "${hive_passwd}" -e "select * from ${hive_table}" >> ${temp_hive_out} 2>> ${temp_hive_out}
+if [ $? -ne 0 ] ; then
+        echo "[`date`] Error in executing query in hive service using JDBC."
+        tm_jdbc=-1
+        cat ${temp_hive_out}
+else
+        echo "[`date`] Query through Hive JDBC ran succefully."
+        tm_jdbc=$(grep "rows selected" ${temp_hive_out} | awk -F"(" '{ print $2 }' | awk '{ print $1 }')
+        [ ! -n "${tm_jdbc}" ] && tm_jdbc=-1
+fi
+echo "[`date`] Query time through JDBC ${tm_jdbc}."
+echo "---------------- Raw Output ----------------"
+cat ${temp_hive_out}
+echo "--------------------------------------------"
+rm -f ${temp_hive_out}
+
+# Section to check HIVE HCAT response
+tm_hcat=-1
+hcat -e "${hcat_sql}" >>  ${temp_hive_out} 2>> ${temp_hive_out}
+if [ $? -ne 0 ] ; then
+        echo "[`date`] Error in executing query in hive hcat service."
+        cat ${temp_hive_out}
+else
+        echo "[`date`] Query through Hive Hcat ran succefully."
+        tail -1 ${temp_hive_out} | grep -q "Time taken:"
+        if [ $? -eq 0 ] ; then
+                tm_hcat=$(tail -1 ${temp_hive_out} | awk '{ print $3 }')
+        fi
+fi
+echo "[`date`] Query time through HCat ${tm_hcat}."
+echo "---------------- Raw Output ----------------"
+cat ${temp_hive_out}
+echo "--------------------------------------------"
+rm -f ${temp_hive_out}
+
+# Section to check HIVE Connection Count
+echo "[`date`] Starting to get Hive concurrent connection count from host ${hive_host}."
+hive_conn_cunt=$(timeout 4 ssh -o StrictHostKeyChecking=no -o BatchMode=yes -q ${hive_host} 'sh -c "netstat -anl | grep 10000 | grep ESTABLISHED | wc -l"')
+echo "[`date`] Hive concurrent connection count is currently $hive_conn_cunt."
+
+#####################################################################################################
+# YARN health check
+#####################################################################################################
+
+submt_job=$(yarn application -list -appStates ACCEPTED | grep "Total number of applications" | awk -F"ACCEPTED" '{ print $2 }' | awk -F":" '{ print $2 }')
+echo "[`date`] Job currently in ACCEPTED state is $submt_job"
+
+# Section to wait for 5 minutes to compare a job running snapshot to detect non progressing(hung) job
+start_cur=$(date +%s)
+tm_diff=$(expr ${start_cur} - ${start_tm})
+snpsht_prd=$(echo "${yn_hung_tm} * 60" | bc)
+if [ ${snpsht_prd} -gt ${tm_diff} ] ; then
+        tm_wt=$(expr ${snpsht_prd} - ${tm_diff})
+	echo "[`date`] Less than ${snpsht_prd} Minutes to grab next YARN Job snapshot, thus will wait for ${tm_wt} seconds."
+        sleep ${tm_wt}s
+fi
+# Collecting current Yarn RUNNING Job snapshot
+yarn application -list | sed '1,2d' > ${temp_yarn_fl_lt}
+echo "======================== YARN JOB LIST FINAL ========================"
+cat ${temp_yarn_fl_lt}
+echo "====================================================================="
+
+# Section to compare old snapshot to detect non progressing(hung) job
+hung_job=""
+while read jobstat
+do
+        jobid=$(echo ${jobstat} | awk '{ print $1 }')
+	echo "[`date`] Considering job ${jobid} for validation." 
+        found_job=$(grep "^${jobid}" ${temp_yarn_fl})
+        if [ -n "${found_job}" ] ; then
+                echo "[`date`] Job ${jobid} still running thus analysing the progress."
+                bef_comp=$(echo ${jobstat} | awk '{ print $8 }' | tr -d "%")
+                aft_comp=$(echo ${found_job} | awk '{ print $8 }' | tr -d "%")
+                echo "[`date`] Job ${jobid} previous completion percentage ${bef_comp} current ${aft_comp}."
+                if [ "${bef_comp}" == "${aft_comp}" ] ; then
+                        echo "[`date`] Job ${jobid} show no progress thus detected hung."
+                        hung_job="${jobid},${hung_job}"
+			echo "[`date`] Hung Job list ${hung_job}."
+                fi
+        fi
+done < ${temp_yarn_fl_lt}
+echo "[`date`] Final Hung Job list ${hung_job}."
+
+# Long running job execution
+lngrun_job=""
+while read jobstat
+do
+        jobid=$(echo ${jobstat} | awk '{ print $1 }')
+        echo "[`date`] Considering job ${jobid} for validation."
+        jobStTm=$(yarn application -status ${jobid} | grep Start-Time | awk -F: '{ print $2 }' | tr -d " ")
+	curTime=$((`date +%s`*1000+`date +%-N`/1000000))
+	time_millis=$(expr $curTime - $jobStTm)
+	time_secs=$(echo "scale=2;${time_millis}/1000" | bc)
+        time_mins=$(echo "scale=2;${time_secs}/60" | bc)
+	jobRunTime=$(echo "${time_mins}" | cut -d"." -f1)
+	[ -z "${jobRunTime}" ] && jobRunTime=0
+	echo "[`date`] Job ${jobid} running for ${time_mins}."
+	if [[ ${time_mins} > ${lngRunTime} ]] ; then
+		echo "[`date`] Job ${jobid} running for more than ${lngRunTime} minutes."
+		lngrun_job="${jobid},${lngrun_job}"
+		echo "[`date`] Long running Job list ${lngrun_job}."
+	fi
+done < ${temp_yarn_fl_lt}
+echo "[`date`] Final Long running Job list ${lngrun_job}."
+
+#####################################################################################################
+# HUE Memory Usage check
+#####################################################################################################
+
+echo "[`date`] Collecting Hue Memory utilization on host ${hue_host}."
+hue_mem_usg=$(timeout 4 ssh -o StrictHostKeyChecking=no -o BatchMode=yes -q ${hue_host} 'sh -c "ps aux | grep hue | grep runcherrypyserver | grep -v grep"' | awk '{ print $4 }')
+echo "[`date`] Memory usage percentage is currently $hue_mem_usg."
+
+#####################################################################################################
+# HOST Health check
+#####################################################################################################
+
+echo "[`date`] Collecting Host Health statistics."
+badHost=""
+for hstNm in `echo ${clstr_hst_mon} | tr "," " "`
+do
+	echo "[`date`] Starting to validate health of host ${hstNm}."
+	hstId=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/hosts/" | grep -B 3 "hostname\" : \"${hstNm}" | grep "hostId" | cut -d '"' -f4)
+	hstStatus=$(curl --max-time 30 -s -u "${hive_user}:${hive_passwd}" -k "https://${cm_srv_hst}:7183/api/v10/hosts/${hstId}" | grep "healthSummary" | cut -d'"' -f4)
+	echo "[`date`] Health of host $hstNm is currently $hstStatus."
+	if [ "${hstStatus}" != "GOOD" ] ; then
+		badHost="${badHost},${hstNm}"
+	fi
+done
+echo "[`date`] Completed collecting Host Health statistics."
+
+#####################################################################################################
+
+#####################################################################################################
+# Data analysis and report generation
+#####################################################################################################
+
+final_err=""
+latest_err_str=""
+echo "[`date`] Report generation started."
+cat ${scpt_hm}/sanity.mail.body > ${temp_mail_body}
+echo "[`date`] Raw mail body before modification:"
+cat ${temp_mail_body}
+
+# Updating Hadoop Cluster Name
+sed -i 's/@@@_CDH_CLUSTER_NAME_@@@/'${clstr_nm}'/g' ${temp_mail_body}
+
+# Analysing HDFS Health
+usage_stat=$(echo "${total_used} > ${hdfs_usg_th}" | bc)
+if [ ${usage_stat} -eq 1 ] ; then
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_REMARK_@@@/Usage(%):'${total_used}'/g' ${temp_mail_body}
+	final_err="HDFS_DISKUSAGE,${final_err}"
+	latest_err_str="HDFS_DISKUSAGE(Used:${total_used}),${latest_err_str}"
+else
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_DISKUSAGE_REPORT_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ ${corp_block} -gt 0 ] ; then
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_REMARK_@@@/Corrupt block:'${corp_block}'/g' ${temp_mail_body}
+        final_err="HDFS_CORRUPT_BLOCK,${final_err}"
+        latest_err_str="HDFS_CORRUPT_BLOCK(Number:${corp_block}),${latest_err_str}"
+else
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_CORRUPT_BLOCK_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ ${undr_rep} -gt 0 ] ; then
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_REMARK_@@@/Underreplicated Block:'${undr_rep}'/g' ${temp_mail_body}
+        final_err="HDFS_UNDERREPLICA,${final_err}"
+        latest_err_str="HDFS_UNDERREPLICA(Number:${undr_rep}),${latest_err_str}"
+else
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HDFS_UNDERREPLICA_BLOCK_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Disk Usage
+if [ -n "${serv_usr}" ] ; then
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_REMARK_@@@/Offending user '${serv_usr}'/g' ${temp_mail_body}
+        final_err="SERVICE_ACCNT,${final_err}"
+        latest_err_str="SERVICE_ACCNT(List:${serv_usr}),${latest_err_str}"
+else
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_SERVICE_ACCNT_DISKUSAGE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ -n "${nrml_usr}" ] ; then
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_REMARK_@@@/Offending user '${nrml_usr}'/g' ${temp_mail_body}
+        final_err="NORMAL_ACCNT,${final_err}"
+        latest_err_str="NORMAL_ACCNT(List:${nrml_usr}),${latest_err_str}"
+else
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_NORMAL_ACCNT_DISKUSAGE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ -n "${tmp_usg}" ] ; then
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_REMARK_@@@/Usage '${tmp_usg}'/g' ${temp_mail_body}
+        final_err="TEMP_DIR_DISKUSAGE,${final_err}"
+        latest_err_str="TEMP_DIR_DISKUSAGE(Usage:${tmp_usg}G),${latest_err_str}"
+else
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_TEMP_DIR_DISKUSAGE_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Hive Service Health
+con_stat=$(echo "${tm_cmd} == -1" | bc)
+qry_tm=$(echo "${tm_cmd} > ${hive_cli_mxtm}" | bc)
+if [ ${con_stat} -eq 1 -o ${qry_tm} -eq 1 ] ; then
+        sed -i 's/@@@_HIVE_CLI_ACCESS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_CLI_ACCESS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        if [ ${con_stat} -eq 1 ] ; then
+                sed -i 's/@@@_HIVE_CLI_ACCESS_REMARK_@@@/Cannot connect to Hive/g' ${temp_mail_body}
+		latest_err_str="HIVE_CLI(Not Connected),${latest_err_str}"
+        else
+                sed -i 's/@@@_HIVE_CLI_ACCESS_REMARK_@@@/Abnormal response time '${tm_cmd}'/g' ${temp_mail_body}
+		latest_err_str="HIVE_CLI(Query Time:${qry_tm}),${latest_err_str}"
+        fi
+        final_err="HIVE_CLI,${final_err}"
+else
+        sed -i 's/@@@_HIVE_CLI_ACCESS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_CLI_ACCESS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_CLI_ACCESS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+con_stat=$(echo "${tm_jdbc} == -1" | bc)
+qry_tm=$(echo "${tm_jdbc} > ${hive_bln_mxtm}" | bc)
+if [ ${con_stat} -eq 1 -o ${qry_tm} -eq 1 ] ; then
+        sed -i 's/@@@_HIVE_JDBC_ACCESS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_JDBC_ACCESS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        if [ ${con_stat} -eq 1 ] ; then
+                sed -i 's/@@@_HIVE_JDBC_ACCESS_REMARK_@@@/Cannot connect to Hive/g' ${temp_mail_body}
+		latest_err_str="HIVE_JDBC(Not Connected),${latest_err_str}"
+        else
+                sed -i 's/@@@_HIVE_JDBC_ACCESS_REMARK_@@@/Abnormal response time '${tm_jdbctm_cmd}'/g' ${temp_mail_body}
+		latest_err_str="HIVE_JDBC(Query Time:${qry_tm}),${latest_err_str}"
+        fi
+        final_err="HIVE_JDBC,${final_err}"
+else
+        sed -i 's/@@@_HIVE_JDBC_ACCESS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_JDBC_ACCESS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_JDBC_ACCESS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+con_stat=$(echo "${tm_hcat} == -1" | bc)
+qry_tm=$(echo "${tm_hcat} > ${hive_wct_mxtm}" | bc)
+if [ ${con_stat} -eq 1 -o ${qry_tm} -eq 1 ] ; then
+        sed -i 's/@@@_HIVE_HCAT_ACCESS_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HCAT_ACCESS_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        if [ ${con_stat} -eq 1 ] ; then
+                sed -i 's/@@@_HIVE_HCAT_ACCESS_REMARK_@@@/Cannot connect to Hive Hcat/g' ${temp_mail_body}
+                latest_err_str="HIVE_HCAT(Not Connected),${latest_err_str}"
+        else
+                sed -i 's/@@@_HIVE_HCAT_ACCESS_REMARK_@@@/Abnormal response time '${tm_hcat}'/g' ${temp_mail_body}
+                latest_err_str="HIVE_HCAT(Query Time:${qry_tm}),${latest_err_str}"
+        fi
+        final_err="HIVE_HCAT,${final_err}"
+else
+        sed -i 's/@@@_HIVE_HCAT_ACCESS_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HCAT_ACCESS_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_HCAT_ACCESS_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+if [ "${hive_conn_cunt//[0-9]}" != "" ]; then
+        sed -i 's/@@@_HIVE_SRV2_CONTN_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_REMARK_@@@/Cannot fetch data/g' ${temp_mail_body}
+	latest_err_str="HIVESRV2_CONNECTN(Error in Datacollection),${latest_err_str}"
+	final_err="HIVESRV2_CONNECTN,${final_err}"
+elif [ ${hive_conn_cunt} -gt ${hiv_conn} ]; then
+        sed -i 's/@@@_HIVE_SRV2_CONTN_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_REMARK_@@@/Hive Connection '${hive_conn_cunt}'/g' ${temp_mail_body}
+        latest_err_str="HIVESRV2_CONNECTN(Hive Connection:${hive_conn_cunt}),${latest_err_str}"
+        final_err="HIVESRV2_CONNECTN,${final_err}"
+else
+        sed -i 's/@@@_HIVE_SRV2_CONTN_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HIVE_SRV2_CONTN_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Yarn Health
+if [ ${submt_job} -gt ${yn_acc_th} ] ; then
+        sed -i 's/@@@_YARN_APP_NUMBER_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_NUMBER_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_NUMBER_REMARK_@@@/SUBMITTED Number 5/g' ${temp_mail_body}
+        final_err="YARN_APP_NUMBER,${final_err}"
+        latest_err_str="YARN_APP_NUMBER(Submit Number:${submt_job}),${latest_err_str}"
+else
+        sed -i 's/@@@_YARN_APP_NUMBER_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_NUMBER_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_NUMBER_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ -n "${hung_job}" ] ; then
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_REMARK_@@@/Hung(Suspect):'${hung_job}'/g' ${temp_mail_body}
+        final_err="YARN_APP_HANG,${final_err}"
+	latest_err_str="YARN_APP_HANG(Hung Job:${hung_job}),${latest_err_str}"
+else
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_HANG_REPORT_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+if [ -n "${lngrun_job}" ] ; then
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_REMARK_@@@/Long Running:'${lngrun_job}'/g' ${temp_mail_body}
+        final_err="YARN_APP_LNGRUN,${lngrun_job}"
+        latest_err_str="YARN_APP_LNGRUN(Hung Job:${lngrun_job}),${latest_err_str}"
+else
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_YARN_APP_LNGRUN_REPORT_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Hue Memory Usage 
+hue_mem_usg=$(echo ${hue_mem_usg} | cut -d"." -f1)
+if [ ${hue_mem_usg} -gt ${hue_mem_th} ] ; then
+        sed -i 's/@@@_HUE_MEMORY_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_MEMORY_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_MEMORY_REMARK_@@@/Usage '${hue_mem_usg}'/g' ${temp_mail_body}
+        if [ "${hueToMon}" == "yes" ] ; then
+		final_err="HUE_MEMORY_USAGE,${final_err}"
+	        latest_err_str="HUE_MEMORY_USAGE(Current Usage:${hue_mem_usg}),${latest_err_str}"
+	fi
+else
+        sed -i 's/@@@_HUE_MEMORY_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_MEMORY_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_HUE_MEMORY_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+# Analysing Host Health 
+if [ -n "${badHost}" ] ; then
+	sed -i 's/@@@_WORKER_HOST_HEALTH_COLOR_@@@/F44822/g' ${temp_mail_body}
+        sed -i 's/@@@_WORKER_HOST_HEALTH_STATUS_@@@/CRITICAL/g' ${temp_mail_body}
+        sed -i 's/@@@_WORKER_HOST_HEALTH_REMARK_@@@/Bad Host: '${badHost}'/g' ${temp_mail_body}
+        if [ "${hstToMon}" == "yes" ] ; then
+                final_err="BAD_HOST_DETECTED,${final_err}"
+                latest_err_str="BAD_HOST_DETECTED(Host:${badHost}),${latest_err_str}"
+	fi
+else
+        sed -i 's/@@@_WORKER_HOST_HEALTH_COLOR_@@@/1D8F32/g' ${temp_mail_body}
+        sed -i 's/@@@_WORKER_HOST_HEALTH_STATUS_@@@/OK/g' ${temp_mail_body}
+        sed -i 's/@@@_WORKER_HOST_HEALTH_REMARK_@@@/None/g' ${temp_mail_body}
+fi
+
+#####################################################################################################
+# Logging and ERROR reporting
+#####################################################################################################
+
+echo "[`date`] Updated mail body after all modification:"
+cat ${temp_mail_body}
+echo "[`date`] Report generation complete."
+
+echo "[`date`] Logging execution summary."
+if [ -n "${final_err}" ] ; then
+        echo "[`date`] Problem detected in this execution."
+        tail -1 ${hstry_log} | grep ":INFO:"
+        if [ $? -eq 0 ] ; then
+                echo "[`date`] Last execution was successful."
+                echo "[`date`] :ERROR: (${final_err})" >> ${hstry_log}
+        else
+                echo "[`date`] Last execution was also unsuccessful."
+                error_str=$(tail -1 ${hstry_log} | awk -F"(" '{ print $2 }' | awk -F")" '{ print $1 }')
+                error_stat=""
+                for i in `echo ${final_err} | tr "," " "`; do error_stat=$(echo ${error_str} | grep $i); [ $? -ne 0 ] && break ; done
+                if [ -n "${error_stat}" ] ; then
+                        echo "[`date`] Current execution detected same or less issues than last one, thus no new case required."
+                else
+                        echo "[`date`] Current execution detected more or new issues than last one, thus new case required."
+                        echo "[`date`] :ERROR: (${final_err})" >> ${hstry_log}
+                fi
+        fi
+        echo "[`date`] :ERROR: ${latest_err_str}" >> ${error_log}
+else
+        echo "[`date`] No issue detected."
+        echo "[`date`] :INFO: (OK)" >> ${hstry_log}
+fi
+
+#####################################################################################################
+# Mailing Section
+#####################################################################################################
+
+hst_nm=$(hostname)
+if [[ -n "${final_err}" ]] ; then
+(
+  echo To: ${mail_id}
+  echo From: HadoopAdmin
+  echo "Content-Type: text/html; "
+  echo "Subject: ALERT - Hadoop Cluster - Sanity - ${clstr_nm}"
+  echo ""
+  cat ${temp_mail_body}
+) | /usr/sbin/sendmail -t
+elif [[ ! -n "${final_err}" ]] && [[ "${sucs_mail}" == "yes" ]] ; then
+(
+  echo To: ${mail_id}
+  echo From: HadoopAdmin
+  echo "Content-Type: text/html; "
+  echo "Subject: INFO - Hadoop Cluster - Sanity - ${clstr_nm}"
+  echo ""
+  cat ${temp_mail_body}
+) | /usr/sbin/sendmail -t
+fi
+
+#####################################################################################################
+# Cleanup
+#####################################################################################################
+rm -f ${scpt_hm}/tmp/sanity.*.tmp.*
+
+echo "[`date`] Execution Completed."
