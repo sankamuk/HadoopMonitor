@@ -252,8 +252,8 @@ do
 	jobRunTime=$(echo "${time_mins}" | cut -d"." -f1)
 	[ -z "${jobRunTime}" ] && jobRunTime=0
 	echo "[`date`] Job ${jobid} running for ${time_mins} rounded to ${jobRunTime}."
-	if [[ ${jobRunTime} > ${lngRunTime} ]] ; then
-		echo "[`date`] Job ${jobid} running for more than ${lngRunTime} minutes, rounded to ${jobRunTime}."
+	if [ ${jobRunTime} -gt ${lngRunTime} ] ; then
+		echo "[`date`] Job ${jobid} running for more than ${lngRunTime} minutes, rounded runtime ${jobRunTime}."
 		lngrun_job="${jobid},${lngrun_job}"
 		echo "[`date`] Long running Job list ${lngrun_job}."
 	fi
